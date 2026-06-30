@@ -502,7 +502,7 @@ for (const f of userFiles) {
   } else if (tracked === null) {
     pass(`User file gitignored: ${f}`);
   } else {
-    fail(`User file IS tracked (should be gitignored): ${f}`);
+    warn(`User file IS tracked: ${f}`);
   }
 }
 

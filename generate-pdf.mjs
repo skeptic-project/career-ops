@@ -288,7 +288,7 @@ async function generatePDF() {
     console.log(`🧹 ATS normalization: ${totalReplacements} replacements (${breakdown})`);
   }
 
-  return renderHtmlToPdf(html, outputPath, { format, baseDir: dirname(inputPath) });
+  return renderHtmlToPdf(html, outputPath, { format, baseDir: dirname(inputPath), inputPath, reportNum });
 }
 
 /**
@@ -350,6 +350,8 @@ export async function inlineLocalFonts(html) {
 export async function renderHtmlToPdf(html, outputPath, opts = {}) {
   const format = opts.format || 'a4';
   const baseDir = opts.baseDir || process.cwd();
+  const inputPath = opts.inputPath || '';
+  const reportNum = opts.reportNum || '';
 
   mkdirSync(dirname(outputPath), { recursive: true });
 
