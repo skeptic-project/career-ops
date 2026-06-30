@@ -1,10 +1,10 @@
 ---
 type: epic
 id: 001
-status: triage
+status: ready
 owner: product
 tags:
-  - triage
+  - ready
   - career-ops
   - jd-persistence
   - pipeline-integrity
@@ -24,10 +24,19 @@ When `career-ops` runs with `scan` or with a job-description URL argument, the e
 
 - Store extracted JD Markdown at `jds/<company-name>-<role>.md`.
 - Add or update `data/pipeline.md` entries using `local:jds/<company-name>-<role>.md | Company | Role`.
-- Add a JD reference to `data/scan-history.tsv`, including schema migration if a new column is needed.
-- Update tracker-addition TSV generation so JD path is carried through the evaluation workflow.
-- Update `merge-tracker.mjs` so `data/applications.md` preserves a `JD` column after `Report`.
+- Add a `jd_path` reference to `data/scan-history.tsv`; preserve compatibility with the current 7-column format.
+- Update tracker-addition TSV generation so JD path is carried through the evaluation workflow in a documented 10-column format.
+- Update `merge-tracker.mjs` and shared tracker readers so `data/applications.md` preserves a `JD` column after `Report`.
 - Ensure `data/applications.md` stores tracker-relative JD paths such as `../jds/<company-name>-<role>.md`.
+
+## Engineering Findings
+
+- `modes/pipeline.md` already documents `local:` input support, and `modes/scan.md` already mentions private URLs saved under `jds/`; implementation must align code with those docs.
+- `scan.mjs` currently writes pipeline rows from `formatPipelineOffer()` and scan-history rows from `formatScanHistoryRow()` using `url`, not a persisted JD path.
+- `data/scan-history.tsv` is currently written as 7 columns: `url`, `first_seen`, `portal`, `title`, `company`, `status`, `location`.
+- `tracker-parse.mjs` already maps tracker columns by header name, which should make the `JD` column safe for many readers once `jd` is added to `HEADER_ALIASES`.
+- `verify-pipeline.mjs` still carries its own local header map and must be updated separately or refactored to use `tracker-parse.mjs`.
+- `merge-tracker.mjs` already supports optional `location`; JD should follow the same header-aware pattern.
 
 ## Non-Goals
 
@@ -43,7 +52,7 @@ When `career-ops` runs with `scan` or with a job-description URL argument, the e
 - Existing tracker rows can be migrated or rendered without breaking.
 - `node verify-pipeline.mjs` passes after adding and merging a JD-backed evaluation.
 
-## Triage Tasks
+## Ready Tasks
 
 - [Task 001.01: Persist extracted JD Markdown](001.01-persist-extracted-jd.md)
 - [Task 001.02: Reference local JD files from pipeline entries](001.02-pipeline-local-jd-reference.md)
