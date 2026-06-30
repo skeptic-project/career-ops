@@ -40,6 +40,15 @@ Save the full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` (see 
 Include Block G in the saved report. Add **URL:** {url} and **Legitimacy:** {tier} to the report header.
 If the input was a URL, save the extracted JD Markdown under `jds/{company-role}.md` and carry that path into tracker TSV column `jd`.
 
+## Step 2.5 — Generate Tailored Resume Markdown & Calculate final-score (if generating PDF)
+
+If the evaluation score is high enough to trigger PDF generation (score >= `auto_pdf_score_threshold` in `config/profile.yml` or defaults to 3.0):
+1. **Generate tailored resume Markdown:** Tailor `cv.md` for this JD. Preserve all markdown formatting, whitespace, heading levels, and structure exactly. While applying changes, use **targeted string replacements (targeted `str_replace` operations)** — never rewrite the file from scratch!
+2. **Save tailored resume Markdown:** Save it at `output/cv-{candidate}-{company}.md`.
+3. **Calculate final-score:** Re-evaluate the JD against this tailored Markdown resume (rather than base `cv.md`) to calculate the `final-score`.
+4. **Include in Tracker:** Update the `resume-md` column in the tracker TSV addition with this file path, and the `final-score` column with this new score.
+5. **PDF Generation Base:** Use this newly generated tailored Markdown resume as the base content when generating the PDF resume in Step 3.
+
 ## Step 3 — Generate PDF
 
 Read `config/profile.yml`. Check `cv.output_format`:
@@ -85,7 +94,7 @@ If the final score is >= 4.5, generate a draft of responses for the application 
 
 ## Step 5 — Update Tracker
 
-Record it in `data/applications.md` with all columns including Report and PDF as ✅.
+Record it in `data/applications.md` with all columns populated. If a tailored Markdown resume and final-score were calculated in Step 2.5, include the path in the `resume-md` column (normalized relative to the tracker) and the score in the `final-score` column; otherwise use `—` for both.
 Include the JD column when a local JD file exists.
 
 **If any step fails**, continue with the next ones and mark the failed step as pending in the tracker.
