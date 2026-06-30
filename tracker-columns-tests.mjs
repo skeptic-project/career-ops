@@ -143,10 +143,10 @@ const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport
     const cells = row ? row.split('|').map(s => s.trim()) : [];
     if (cells[5] === 'Singapore') pass('Location preserved with JD column');
     else fail(`Location with JD column — got "${cells[5]}" in row: ${row}`);
-    if (cells[10] === 'jds/globex-manager.md') pass('JD path normalized relative to tracker');
-    else fail(`JD column normalized — got "${cells[10]}" in row: ${row}`);
-    if (cells[11] === 'new row') pass('Notes preserved after JD column');
-    else fail(`Notes after JD column — got "${cells[11]}" in row: ${row}`);
+    if (cells[12] === 'jds/globex-manager.md') pass('JD path normalized relative to tracker');
+    else fail(`JD column normalized — got "${cells[12]}" in row: ${row}`);
+    if (cells[13] === 'new row') pass('Notes preserved after JD column');
+    else fail(`Notes after JD column — got "${cells[13]}" in row: ${row}`);
   }
   rmSync(sb.dir, { recursive: true, force: true });
 }
@@ -158,7 +158,7 @@ const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport
   const verify = runScript('verify-pipeline.mjs', [], sb);
   const row = dataRows(sb.tracker).find(l => l.includes('Globex'));
   const cells = row ? row.split('|').map(s => s.trim()) : [];
-  // cells: ['', num, date, company, role, score, status, pdf, report, notes, '']
+  // cells: ['', num, date, company, role, score, status, resume-md, final-score, pdf, report, notes, '']
   if (merge.code === 0 && cells[5] === 'N/A' && cells[6] === 'Applied') {
     pass('9-col tracker still merges into correct columns');
   } else {
@@ -179,7 +179,7 @@ const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport
   const row = dataRows(sb.tracker).find(l => l.includes('Initech'));
   const cells = row ? row.split('|').map(s => s.trim()) : [];
   const header = readFileSync(sb.tracker, 'utf-8').split('\n').find(l => l.startsWith('| # |')) || '';
-  if (merge.code === 0 && header.includes('| JD |') && cells[8] === '—' && cells[9] === 'jds/initech-lead.md' && cells[10] === 'jd row') {
+  if (merge.code === 0 && header.includes('| JD |') && cells[10] === '—' && cells[11] === 'jds/initech-lead.md' && cells[12] === 'jd row') {
     pass('merge-tracker inserts JD column after Report and preserves Notes');
   } else {
     fail(`JD-column merge failed (code ${merge.code}) header: ${header} row: ${row}\n${merge.stdout}`);

@@ -22,6 +22,8 @@ export const HEADER_ALIASES = {
   '#': 'num', 'num': 'num', 'date': 'date', 'company': 'company', 'empresa': 'company',
   'role': 'role', 'puesto': 'role', 'location': 'location', 'score': 'score',
   'status': 'status', 'pdf': 'pdf', 'report': 'report', 'jd': 'jd', 'notes': 'notes',
+  'resume-md': 'resumeMd', 'resume_md': 'resumeMd',
+  'final-score': 'finalScore', 'final_score': 'finalScore',
 };
 
 /**
@@ -85,5 +87,7 @@ export function parseTrackerRow(line, colmap = LEGACY_COLMAP) {
   };
   if (colmap.location != null) row.location = at('location');
   if (colmap.jd != null) row.jd = at('jd');
+  if (colmap.resumeMd != null) row.resumeMd = at('resumeMd');
+  if (colmap.finalScore != null) row.finalScore = at('finalScore');
   return row;
 }

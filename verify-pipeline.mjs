@@ -153,6 +153,18 @@ for (const e of entries) {
 }
 if (brokenJds === 0) ok('All JD links valid');
 
+// --- Check 3c: resume-md links ---
+let brokenResumes = 0;
+for (const e of entries) {
+  if (!e.resumeMd || e.resumeMd === '—') continue;
+  const link = e.resumeMd.replace(/^local:/, '').trim();
+  if (!existsSync(join(TRACKER_DIR, link)) && !existsSync(join(CAREER_OPS, link))) {
+    error(`#${e.num}: resume-md not found: ${link}`);
+    brokenResumes++;
+  }
+}
+if (brokenResumes === 0) ok('All resume-md links valid');
+
 // --- Check 4: Score format ---
 let badScores = 0;
 for (const e of entries) {
@@ -163,6 +175,18 @@ for (const e of entries) {
   }
 }
 if (badScores === 0) ok('All scores valid');
+
+// --- Check 4b: final-score format ---
+let badFinalScores = 0;
+for (const e of entries) {
+  if (!e.finalScore || e.finalScore === '—') continue;
+  const s = e.finalScore.replace(/\*\*/g, '').trim();
+  if (!/^\d+\.?\d*\/5$/.test(s) && s !== 'N/A' && s !== 'DUP') {
+    error(`#${e.num}: Invalid final-score format: "${e.finalScore}"`);
+    badFinalScores++;
+  }
+}
+if (badFinalScores === 0) ok('All final-scores valid');
 
 // --- Check 5: Row format ---
 let badRows = 0;

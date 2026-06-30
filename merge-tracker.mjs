@@ -68,6 +68,8 @@ const normalizeReportLink = (reportField) => normalizeLink(reportField, TRACKER_
 
 const normalizeJdLink = (jdField) => normalizePathLink(jdField, TRACKER_DIR, JDS_ROOT);
 
+const normalizeResumeMdLink = (resumeField) => normalizePathLink(resumeField, TRACKER_DIR, CAREER_OPS);
+
 // Ensure required directories exist (fresh setup)
 mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
 mkdirSync(ADDITIONS_DIR, { recursive: true });
@@ -489,6 +491,66 @@ function ensureJdColumn(content) {
   return { content: out.join('\n'), changed: true };
 }
 
+function ensureResumeAndScoreColumns(content) {
+  const lines = content.split('\n');
+  const headerIdx = lines.findIndex((line) => {
+    if (!line.startsWith('|')) return false;
+    const cells = splitMarkdownRow(line).map(c => c.toLowerCase());
+    return cells.includes('company') && cells.includes('role') && cells.includes('pdf');
+  });
+  if (headerIdx === -1) return { content, changed: false };
+  const headerCells = splitMarkdownRow(lines[headerIdx]);
+  const lower = headerCells.map(c => c.toLowerCase());
+  
+  const hasResume = lower.includes('resume-md');
+  const hasScore = lower.includes('final-score');
+  if (hasResume && hasScore) return { content, changed: false };
+
+  const pdfIdx = lower.indexOf('pdf');
+  if (pdfIdx === -1) return { content, changed: false };
+
+  const out = lines.map((line, idx) => {
+    if (!line.startsWith('|')) return line;
+    const cells = splitMarkdownRow(line);
+    
+    if (idx === headerIdx) {
+      if (!hasResume) {
+        cells.splice(pdfIdx, 0, 'resume-md');
+      }
+      const currentPdfIdx = cells.map(c => c.toLowerCase()).indexOf('pdf');
+      if (!hasScore) {
+        cells.splice(currentPdfIdx, 0, 'final-score');
+      }
+      return buildMarkdownRow(cells);
+    }
+    
+    if (/^[-: ]+$/.test(cells.join(''))) {
+      if (!hasResume) {
+        cells.splice(pdfIdx, 0, '---');
+      }
+      const currentPdfIdx = cells.length > pdfIdx ? pdfIdx + (!hasResume ? 1 : 0) : pdfIdx;
+      if (!hasScore) {
+        cells.splice(currentPdfIdx, 0, '---');
+      }
+      return `|${cells.join('|')}|`;
+    }
+    
+    const num = parseInt(cells[0], 10);
+    if (Number.isNaN(num) || cells.length <= pdfIdx) return line;
+    
+    if (!hasResume) {
+      cells.splice(pdfIdx, 0, '—');
+    }
+    const currentPdfIdx = cells.length > pdfIdx ? pdfIdx + (!hasResume ? 1 : 0) : pdfIdx;
+    if (!hasScore) {
+      cells.splice(currentPdfIdx, 0, '—');
+    }
+    return buildMarkdownRow(cells);
+  });
+
+  return { content: out.join('\n'), changed: true };
+}
+
 function normalizePathLink(pathField, trackerDir, rootDir) {
   const raw = String(pathField ?? '').trim().replace(/^local:/, '');
   if (!raw || raw === '—') return '';
@@ -511,6 +573,8 @@ function buildRow(o) {
     location: cell(o.location) || '—',
     score: o.score,
     status: o.status,
+    resumeMd: cell(o.resumeMd) || '—',
+    finalScore: o.finalScore || '—',
     pdf: o.pdf,
     report: o.report,
     jd: cell(o.jd),
@@ -548,6 +612,8 @@ function parseAppLine(line) {
     location: COLMAP.location != null ? parts[COLMAP.location] : '',
     score: parts[COLMAP.score],
     status: parts[COLMAP.status],
+    resumeMd: COLMAP.resumeMd != null ? parts[COLMAP.resumeMd] : '',
+    finalScore: COLMAP.finalScore != null ? parts[COLMAP.finalScore] : '',
     pdf: parts[COLMAP.pdf],
     report: parts[COLMAP.report],
     jd: COLMAP.jd != null ? parts[COLMAP.jd] : '',
@@ -594,6 +660,8 @@ function parseTsvContent(content, filename) {
       role: get('role'),
       status: validateStatus(statusRaw),
       score: scoreRaw,
+      resumeMd: get('resume-md') || get('resume_md'),
+      finalScore: get('final-score') || get('final_score'),
       pdf: get('pdf'),
       report: get('report'),
       jd: get('jd'),
@@ -628,6 +696,8 @@ function parseTsvContent(content, filename) {
       role: parts[3],
       score: parts[4],
       status: validateStatus(parts[5]),
+      resumeMd: '',
+      finalScore: '',
       pdf: parts[6],
       report: parts[7],
       jd: (looksLikeJdPath(parts[8]) || parts[8] === '') ? parts[8] : '',
@@ -682,6 +752,8 @@ function parseTsvContent(content, filename) {
       role: parts[3],
       status: validateStatus(statusCol),
       score: scoreCol,
+      resumeMd: '',
+      finalScore: '',
       pdf: parts[6],
       report: parts[7],
       jd: jdCol,
@@ -712,6 +784,12 @@ if (schemaMigration.changed) {
   appContent = schemaMigration.content;
   if (!DRY_RUN) writeFileAtomic(APPS_FILE, appContent);
   console.log('🧾 Added JD column to tracker schema.');
+}
+const schemaMigration2 = ensureResumeAndScoreColumns(appContent);
+if (schemaMigration2.changed) {
+  appContent = schemaMigration2.content;
+  if (!DRY_RUN) writeFileAtomic(APPS_FILE, appContent);
+  console.log('🧾 Added resume-md and final-score columns to tracker schema.');
 }
 // Test-only synchronization hook: the concurrent merge test waits for the
 // first worker to read the tracker while still holding the lock, then starts a
@@ -798,6 +876,7 @@ for (const file of tsvFiles) {
   // so it resolves correctly when clicked from applications.md (see #760).
   addition.report = normalizeReportLink(addition.report);
   addition.jd = normalizeJdLink(addition.jd);
+  addition.resumeMd = normalizeResumeMdLink(addition.resumeMd);
 
   // Check for duplicate by:
   // 1. Exact report number match
@@ -851,7 +930,10 @@ for (const file of tsvFiles) {
         const updatedLine = buildRow({
           num: duplicate.num, date: addition.date, company: addition.company, role: addition.role,
           location: addition.location || duplicate.location || '—',
-          score: addition.score, status: duplicate.status, pdf: duplicate.pdf,
+          score: addition.score, status: duplicate.status,
+          resumeMd: addition.resumeMd || duplicate.resumeMd || '—',
+          finalScore: addition.finalScore || duplicate.finalScore || '—',
+          pdf: duplicate.pdf,
           report: addition.report,
           jd: addition.jd || duplicate.jd || '',
           notes: `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,
@@ -871,7 +953,10 @@ for (const file of tsvFiles) {
     const newLine = buildRow({
       num: entryNum, date: addition.date, company: addition.company, role: addition.role,
       location: addition.location || '—',
-      score: addition.score, status: addition.status, pdf: addition.pdf,
+      score: addition.score, status: addition.status,
+      resumeMd: addition.resumeMd || '—',
+      finalScore: addition.finalScore || '—',
+      pdf: addition.pdf,
       report: addition.report, jd: addition.jd || '', notes: addition.notes,
     });
     newLines.push(newLine);
