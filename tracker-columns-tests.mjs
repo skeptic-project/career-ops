@@ -85,9 +85,18 @@ const HEADER_9 = `# Applications Tracker
 | 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ✅ | — | seed row |
 `;
 
+const HEADER_JD = `# Applications Tracker
+
+| # | Date | Company | Role | Location | Score | Status | PDF | Report | JD | Notes |
+|---|------|---------|------|----------|-------|--------|-----|--------|----|-------|
+| 1 | 2026-01-01 | Acme | Engineer | Remote | 4.0/5 | Applied | ✅ | — | ../jds/acme-engineer.md | seed row |
+`;
+
 // TSV column order (status BEFORE score): num,date,company,role,status,score,pdf,report,notes[,location]
 const TSV_WITH_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\tnew row\tSingapore\n';
 const TSV_NO_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\tnew row\n';
+const TSV_WITH_JD_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\tjds/globex-manager.md\tnew row\tSingapore\n';
+const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tjd\tnotes\n3\t2026-03-03\tInitech\tLead\tEvaluated\t4.2/5\t❌\t—\tjds/initech-lead.md\tjd row\n';
 
 // ── Test 1: 10-column tracker merges into the correct columns ──────────────
 {
@@ -122,6 +131,26 @@ const TSV_NO_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\
   rmSync(sb.dir, { recursive: true, force: true });
 }
 
+// ── Test 3: JD column merges without shifting Notes ───────────────────────
+{
+  const sb = makeSandbox(HEADER_JD, { '2-globex.tsv': TSV_WITH_JD_LOCATION });
+  const res = runScript('merge-tracker.mjs', [], sb);
+  if (res.code !== 0) {
+    fail(`merge into JD tracker exits 0 (got ${res.code})\n${res.stdout}`);
+  } else {
+    pass('merge into JD tracker exits 0');
+    const row = dataRows(sb.tracker).find(l => l.includes('Globex'));
+    const cells = row ? row.split('|').map(s => s.trim()) : [];
+    if (cells[5] === 'Singapore') pass('Location preserved with JD column');
+    else fail(`Location with JD column — got "${cells[5]}" in row: ${row}`);
+    if (cells[10] === 'jds/globex-manager.md') pass('JD path normalized relative to tracker');
+    else fail(`JD column normalized — got "${cells[10]}" in row: ${row}`);
+    if (cells[11] === 'new row') pass('Notes preserved after JD column');
+    else fail(`Notes after JD column — got "${cells[11]}" in row: ${row}`);
+  }
+  rmSync(sb.dir, { recursive: true, force: true });
+}
+
 // ── Test 3: legacy 9-column layout still works (back-compat) ───────────────
 {
   const sb = makeSandbox(HEADER_9, { '2-globex.tsv': TSV_NO_LOCATION });
@@ -139,6 +168,21 @@ const TSV_NO_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\
     pass('verify-pipeline clean on legacy 9-col tracker');
   } else {
     fail(`verify-pipeline clean on 9-col tracker (code ${verify.code})\n${verify.stdout}`);
+  }
+  rmSync(sb.dir, { recursive: true, force: true });
+}
+
+// ── Test 4: JD column is inserted and populated after Report ───────────────
+{
+  const sb = makeSandbox(HEADER_9, { '3-initech.tsv': TSV_WITH_JD_HEADER });
+  const merge = runScript('merge-tracker.mjs', [], sb);
+  const row = dataRows(sb.tracker).find(l => l.includes('Initech'));
+  const cells = row ? row.split('|').map(s => s.trim()) : [];
+  const header = readFileSync(sb.tracker, 'utf-8').split('\n').find(l => l.startsWith('| # |')) || '';
+  if (merge.code === 0 && header.includes('| JD |') && cells[8] === '—' && cells[9] === 'jds/initech-lead.md' && cells[10] === 'jd row') {
+    pass('merge-tracker inserts JD column after Report and preserves Notes');
+  } else {
+    fail(`JD-column merge failed (code ${merge.code}) header: ${header} row: ${row}\n${merge.stdout}`);
   }
   rmSync(sb.dir, { recursive: true, force: true });
 }

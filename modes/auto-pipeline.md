@@ -38,6 +38,7 @@ The evaluation inherits `oferta`'s bounded research budget. Company, compensatio
 
 Save the full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` (see format in `modes/oferta.md`).
 Include Block G in the saved report. Add **URL:** {url} and **Legitimacy:** {tier} to the report header.
+If the input was a URL, save the extracted JD Markdown under `jds/{company-role}.md` and carry that path into tracker TSV column `jd`.
 
 ## Step 3 — Generate PDF
 
@@ -85,5 +86,6 @@ If the final score is >= 4.5, generate a draft of responses for the application 
 ## Step 5 — Update Tracker
 
 Record it in `data/applications.md` with all columns including Report and PDF as ✅.
+Include the JD column when a local JD file exists.
 
 **If any step fails**, continue with the next ones and mark the failed step as pending in the tracker.

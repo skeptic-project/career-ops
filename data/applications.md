@@ -1,4 +1,4 @@
 # Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
+| # | Date | Company | Role | Score | Status | PDF | Report | JD | Notes |
+|---|------|---------|------|-------|--------|-----|--------|----|-------|

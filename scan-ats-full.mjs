@@ -38,6 +38,7 @@ import lever from './providers/lever.mjs';
 import ashby from './providers/ashby.mjs';
 import workday from './providers/workday.mjs';
 import { buildTitleFilter, buildLocationFilter, loadSeenUrls, appendToPipeline, appendToScanHistory } from './scan.mjs';
+import { persistJobDescriptionsForOffers } from './jd-store.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -352,8 +353,9 @@ async function main() {
       mkdirSync(path.dirname(PIPELINE_PATH), { recursive: true });
       writeFileSync(PIPELINE_PATH, '# Pipeline\n\n## Pendientes\n', 'utf-8');
     }
-    appendToPipeline(offers);
-    appendToScanHistory(offers, date);
+    const offersWithJds = await persistJobDescriptionsForOffers(offers, { date });
+    appendToPipeline(offersWithJds);
+    appendToScanHistory(offersWithJds, date);
     saved = true;
     log(`\nResults saved to ${PIPELINE_PATH} and data/scan-history.tsv`);
 

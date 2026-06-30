@@ -173,8 +173,8 @@ If `data/applications.md` doesn't exist, create it:
 ```markdown
 # Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
+| # | Date | Company | Role | Score | Status | PDF | Report | JD | Notes |
+|---|------|---------|------|-------|--------|-----|--------|----|-------|
 ```
 
 #### Step 5: Get to know the user (important for quality)
@@ -353,10 +353,10 @@ When spawning headless workers for batch processing, use the appropriate command
 
 ### TSV Format for Tracker Additions
 
-Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slug}.tsv`. Single line, 9 tab-separated columns:
+Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slug}.tsv`. Single line, 10 tab-separated columns:
 
 ```
-{num}\t{date}\t{company}\t{role}\t{status}\t{score}/5\t{pdf_emoji}\t[{num}](reports/{num}-{slug}-{date}.md)\t{note}
+{num}\t{date}\t{company}\t{role}\t{status}\t{score}/5\t{pdf_emoji}\t[{num}](reports/{num}-{slug}-{date}.md)\tjds/{company-role}.md\t{note}
 ```
 
 **Column order (IMPORTANT -- status BEFORE score):**
@@ -368,9 +368,10 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 6. `score` -- format `X.X/5` (e.g., `4.2/5`)
 7. `pdf` -- `✅` or `❌`
 8. `report` -- markdown link, always written **root-relative**: `[num](reports/...)`
-9. `notes` -- one-line summary
+9. `jd` -- root-relative job-description markdown path, e.g. `jds/{company-role}.md` (blank only when no JD could be captured)
+10. `notes` -- one-line summary
 
-**Note:** In applications.md, score comes BEFORE status. The merge script handles this column swap automatically.
+**Note:** In applications.md, score comes BEFORE status, and `JD` comes after `Report`. The merge script handles the score/status swap and rewrites root-relative JD paths to tracker-relative links such as `../jds/{company-role}.md`.
 
 **Report link normalization:** The TSV always carries a **root-relative** `[num](reports/...)` link. `merge-tracker.mjs` rewrites it so the link is relative to the tracker file's own directory before writing it into the tracker — `../reports/...` when the tracker is at `data/applications.md`, or `reports/...` at the root layout. This keeps links clickable from the tracker (markdown links resolve relative to the file that contains them). Normalization is idempotent. To fix links in an existing tracker, run `node merge-tracker.mjs --migrate` (see #760).
 

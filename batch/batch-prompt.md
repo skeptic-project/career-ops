@@ -377,9 +377,9 @@ Escribir una línea TSV a:
 batch/tracker-additions/{{ID}}.tsv
 ```
 
-Formato TSV (una sola línea, sin header, 9 columnas tab-separated):
+Formato TSV (una sola línea, sin header, 10 columnas tab-separated):
 ```
-{next_num}\t{{DATE}}\t{empresa}\t{rol}\t{status}\t{score}/5\t{pdf_emoji}\t[{{REPORT_NUM}}](reports/{{REPORT_NUM}}-{company-slug}-{{DATE}}.md)\t{nota_1_frase}
+{next_num}\t{{DATE}}\t{empresa}\t{rol}\t{status}\t{score}/5\t{pdf_emoji}\t[{{REPORT_NUM}}](reports/{{REPORT_NUM}}-{company-slug}-{{DATE}}.md)\tjds/{company-role}.md\t{nota_1_frase}
 ```
 
 **Columnas TSV (orden exacto):**
@@ -394,7 +394,8 @@ Formato TSV (una sola línea, sin header, 9 columnas tab-separated):
 | 6 | score | X.XX/5 | `4.55/5` | O `N/A` si no evaluable |
 | 7 | pdf | emoji | `✅` o `❌` | Si se generó PDF |
 | 8 | report | md link | `[647](reports/647-...)` | Link root-relative; merge-tracker.mjs lo normaliza relativo al tracker (ej. `../reports/...`, #760) |
-| 9 | notes | string | `APPLY HIGH...` | Resumen 1 frase |
+| 9 | jd | path | `jds/datadog-staff-ai-engineer.md` | Ruta root-relative al JD local; vacío solo si no se pudo capturar |
+| 10 | notes | string | `APPLY HIGH...` | Resumen 1 frase |
 
 **IMPORTANTE:** El orden TSV tiene status ANTES de score (col 5→status, col 6→score). En applications.md el orden es inverso (col 5→score, col 6→status). merge-tracker.mjs maneja la conversión.
 

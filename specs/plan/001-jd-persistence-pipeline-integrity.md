@@ -1,10 +1,10 @@
 ---
 type: epic
 id: 001
-status: ready
+status: in-progress
 owner: product
 tags:
-  - ready
+  - in-progress
   - career-ops
   - jd-persistence
   - pipeline-integrity
@@ -52,7 +52,7 @@ When `career-ops` runs with `scan` or with a job-description URL argument, the e
 - Existing tracker rows can be migrated or rendered without breaking.
 - `node verify-pipeline.mjs` passes after adding and merging a JD-backed evaluation.
 
-## Ready Tasks
+## In-Progress Tasks
 
 - [Task 001.01: Persist extracted JD Markdown](001.01-persist-extracted-jd.md)
 - [Task 001.02: Reference local JD files from pipeline entries](001.02-pipeline-local-jd-reference.md)

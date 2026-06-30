@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { rebuildRow } from './tracker-utils.mjs';
+import { resolveColumns } from './tracker-parse.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -94,6 +95,7 @@ if (!existsSync(APPS_FILE)) {
 }
 const content = readFileSync(APPS_FILE, 'utf-8');
 const lines = content.split('\n');
+const COLMAP = resolveColumns(lines);
 
 let changes = 0;
 let unknowns = [];
@@ -103,14 +105,14 @@ for (let i = 0; i < lines.length; i++) {
   if (!line.startsWith('|')) continue;
 
   const parts = line.split('|').map(s => s.trim());
-  // Format: ['', '#', 'fecha', 'empresa', 'rol', 'score', 'STATUS', 'pdf', 'report', 'notas', '']
-  if (parts.length < 9) continue;
-  if (parts[1] === '#' || parts[1] === '---' || parts[1] === '') continue;
+  const maxIdx = Math.max(...Object.values(COLMAP));
+  if (parts.length <= maxIdx) continue;
+  if (parts[COLMAP.num] === '#' || parts[COLMAP.num] === '---' || parts[COLMAP.num] === '') continue;
 
-  const num = parseInt(parts[1]);
+  const num = parseInt(parts[COLMAP.num]);
   if (isNaN(num)) continue;
 
-  const rawStatus = parts[6];
+  const rawStatus = parts[COLMAP.status];
   const result = normalizeStatus(rawStatus);
 
   if (result.unknown) {
@@ -122,21 +124,21 @@ for (let i = 0; i < lines.length; i++) {
 
   // Apply change
   const oldStatus = rawStatus;
-  parts[6] = result.status;
+  parts[COLMAP.status] = result.status;
 
   // Move DUPLICADO info to notes if needed
-  if (result.moveToNotes && parts[9]) {
-    const existing = parts[9] || '';
+  if (result.moveToNotes && COLMAP.notes != null && parts[COLMAP.notes]) {
+    const existing = parts[COLMAP.notes] || '';
     if (!existing.includes(result.moveToNotes)) {
-      parts[9] = result.moveToNotes + (existing ? '. ' + existing : '');
+      parts[COLMAP.notes] = result.moveToNotes + (existing ? '. ' + existing : '');
     }
-  } else if (result.moveToNotes && !parts[9]) {
-    parts[9] = result.moveToNotes;
+  } else if (result.moveToNotes && COLMAP.notes != null && !parts[COLMAP.notes]) {
+    parts[COLMAP.notes] = result.moveToNotes;
   }
 
   // Also strip bold from score field
-  if (parts[5]) {
-    parts[5] = parts[5].replace(/\*\*/g, '');
+  if (parts[COLMAP.score]) {
+    parts[COLMAP.score] = parts[COLMAP.score].replace(/\*\*/g, '');
   }
 
   // Reconstruct line

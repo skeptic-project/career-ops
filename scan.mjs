@@ -38,6 +38,7 @@ import yaml from 'js-yaml';
 import { makeHttpCtx } from './providers/_http.mjs';
 import { buildTrustValidator } from './providers/_trust-validator.mjs';
 import { mergeProviderPlugins } from './plugins/_engine.mjs';
+import { persistJobDescriptionsForOffers, readJobDescriptionMetadata } from './jd-store.mjs';
 
 const parseYaml = yaml.load;
 
@@ -543,6 +544,12 @@ export function loadSeenUrls(policy = {}) {
     for (const match of text.matchAll(/- \[[ x]\] (https?:\/\/\S+)/g)) {
       seen.add(match[1]);
     }
+    for (const match of text.matchAll(/- \[[ x]\] (local:jds\/[^\s|]+)/g)) {
+      const localRef = match[1];
+      seen.add(localRef);
+      const meta = readJobDescriptionMetadata(localRef);
+      if (meta.source_url) seen.add(meta.source_url);
+    }
   }
 
   // applications.md — extract URLs from report links and any inline URLs
@@ -597,7 +604,7 @@ export function sanitizeMarkdownField(value) {
     .replace(/\|/g, '/');
 }
 
-function sanitizePipelineUrl(value) {
+function sanitizePipelineRef(value) {
   return normalizeScanUrl(value)
     .replace(/[\\[\]]/g, char => MARKDOWN_ESCAPE_CHARS[char])
     .replace(/\|/g, '%7C');
@@ -624,7 +631,7 @@ export function formatCompensation(salary) {
 }
 
 export function formatPipelineOffer(offer) {
-  const url = sanitizePipelineUrl(offer.url);
+  const url = sanitizePipelineRef(offer.jdPath ? `local:${offer.jdPath}` : offer.url);
   const company = sanitizeMarkdownField(offer.company);
   const title = sanitizeMarkdownField(offer.title);
   // Optional trailing columns, each sanitized like every other field:
@@ -650,6 +657,7 @@ export function formatScanHistoryRow(offer, date, status = 'added') {
     offer.company,
     status,
     offer.location || '',
+    offer.jdPath || '',
   ].map(sanitizeTsvField).join('\t');
 }
 
@@ -705,13 +713,21 @@ export function appendToPipeline(offers) {
 }
 
 export function appendToScanHistory(offers, date, status = 'added') {
-  // Ensure file + header exist. Location appended as 7th column for non-breaking
+  // Ensure file + header exist. Location appended as 7th column and jd_path as
+  // 8th for non-breaking
   // backward compat — older scan-history.tsv files with 6 columns still parse fine
   // since loadSeenUrls only reads column 0. `status` is parameterized so callers
   // can record verify outcomes (`skipped_expired`, etc.) without the legacy
   // `(expired)` suffix in `source`.
   if (!existsSync(SCAN_HISTORY_PATH)) {
-    writeFileSync(SCAN_HISTORY_PATH, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation\n', 'utf-8');
+    writeFileSync(SCAN_HISTORY_PATH, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation\tjd_path\n', 'utf-8');
+  } else {
+    const existing = readFileSync(SCAN_HISTORY_PATH, 'utf-8');
+    const lines = existing.split('\n');
+    if (lines[0] && !lines[0].split('\t').includes('jd_path')) {
+      lines[0] = `${lines[0]}\tjd_path`;
+      writeFileSync(SCAN_HISTORY_PATH, lines.join('\n'), 'utf-8');
+    }
   }
 
   const lines = offers.map(o => formatScanHistoryRow(o, date, status)).join('\n') + '\n';
@@ -1100,6 +1116,7 @@ async function main() {
 
   // 6. Write results
   if (!dryRun && verifiedOffers.length > 0) {
+    verifiedOffers = await persistJobDescriptionsForOffers(verifiedOffers, { date });
     appendToPipeline(verifiedOffers);
     appendToScanHistory(verifiedOffers, date);
   }

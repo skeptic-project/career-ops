@@ -242,8 +242,9 @@ Levels are additive — they are executed in order, and results are merged and d
    **Do not interrupt the entire scan if a single URL fails.** If `browser_navigate` errors (timeout, 403, etc.), mark as `skipped_expired` and continue with the next one.
 
 8. **For each new verified offer that passes filters**:
-   a. Add to the `pipeline.md` "Pending" section: `- [ ] {url} | {company} | {title}`
-   b. Record in `scan-history.tsv`: `{url}\t{date}\t{query_name}\t{title}\t{company}\tadded`
+   a. Persist the JD to `jds/{company-role}.md` when provider description or bounded fetch extraction succeeds.
+   b. Add to the `pipeline.md` "Pending" section as `- [ ] local:jds/{company-role}.md | {company} | {title}` when a JD file exists; otherwise fall back to `- [ ] {url} | {company} | {title}`.
+   c. Record in `scan-history.tsv`: `{url}\t{date}\t{query_name}\t{title}\t{company}\tadded\t{location}\t{jd_path}`
 
 9. **Offers filtered by title**: record in `scan-history.tsv` with status `skipped_title`.
 10. **Duplicate offers**: record with status `skipped_dup`.
@@ -271,8 +272,8 @@ If a non-publicly accessible URL is found:
 `data/scan-history.tsv` tracks ALL seen URLs:
 
 ```tsv
-url	first_seen	portal	title	company	status
-https://...	2026-02-10	Ashby — AI PM	PM AI	Acme	added
+url	first_seen	portal	title	company	status	location	jd_path
+https://...	2026-02-10	Ashby — AI PM	PM AI	Acme	added	Remote	jds/acme-pm-ai.md
 ```
 
 ## Output Summary

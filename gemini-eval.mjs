@@ -417,6 +417,7 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
       normalizedTrackerScore(score),
       '❌',
       `[${num}](reports/${filename})`,
+      '',
       'Gemini evaluation',
     ];
     writeFileSync(trackerPath, `${trackerFields.join('\t')}\n`, 'utf-8');

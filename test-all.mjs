@@ -814,17 +814,19 @@ try {
   const compZeroMin = formatCompensation({ min: 0, max: 200000, currency: '' });
   const withComp = formatPipelineOffer({ url: 'https://x/4', company: 'Acme', title: 'AI Eng', location: 'Remote', salary: { min: 180000, max: 220000, currency: 'USD' } });
   const compNoLoc = formatPipelineOffer({ url: 'https://x/5', company: 'Acme', title: 'AI Eng', salary: { min: 180000, max: 220000, currency: 'USD' } });
+  const withJd = formatPipelineOffer({ url: 'https://x/6', jdPath: 'jds/acme-ai-eng.md', company: 'Acme', title: 'AI Eng', location: 'Remote' });
   if (
     compRange === '180000-220000 USD' &&
     compSingle === '150000 usd' &&
     compNone === '' &&
     compZeroMin === '200000' &&
     withComp === '- [ ] https://x/4 | Acme | AI Eng | Remote | 180000-220000 USD' &&
-    compNoLoc === '- [ ] https://x/5 | Acme | AI Eng |  | 180000-220000 USD'
+    compNoLoc === '- [ ] https://x/5 | Acme | AI Eng |  | 180000-220000 USD' &&
+    withJd === '- [ ] local:jds/acme-ai-eng.md | Acme | AI Eng | Remote'
   ) {
-    pass('scan.mjs formatPipelineOffer appends compensation column (forces empty location cell when needed)');
+    pass('scan.mjs formatPipelineOffer appends compensation column and prefers local JD refs when available');
   } else {
-    fail(`scan.mjs compensation column wrong: "${compRange}" / "${compSingle}" / "${compNone}" / "${compZeroMin}" / "${withComp}" / "${compNoLoc}"`);
+    fail(`scan.mjs compensation/JD column wrong: "${compRange}" / "${compSingle}" / "${compNone}" / "${compZeroMin}" / "${withComp}" / "${compNoLoc}" / "${withJd}"`);
   }
 } catch (err) {
   fail(`scan.mjs formatPipelineOffer import failed: ${err.message}`);
@@ -1868,14 +1870,15 @@ try {
     title: 'Senior Engineer | Growth\n- [ ] https://evil.example/job | EvilCorp | Injected',
     company: '=ACME\\Corp\t| R&D',
     location: '@Remote\nEU',
+    jdPath: 'jds/acme-senior-engineer.md',
   };
   const pipelineRow = formatPipelineOffer(hostileOffer);
-  const pendingLines = pipelineRow.split('\n').filter(line => /^\s*- \[ \] https?:\/\//.test(line));
+  const pendingLines = pipelineRow.split('\n').filter(line => /^\s*- \[ \] (?:https?:\/\/|local:jds\/)/.test(line));
   const pipelineFields = pipelineRow.split('|').map(part => part.trim());
   if (
     pendingLines.length === 1 &&
     pipelineFields.length === 4 &&
-    pipelineFields[0] === '- [ ] https://jobs.example.com/123%7Cevil' &&
+    pipelineFields[0] === '- [ ] local:jds/acme-senior-engineer.md' &&
     pipelineFields[3] === '@Remote EU' &&
     !pipelineRow.includes('\n') &&
     !pipelineRow.includes('\t') &&
@@ -1891,14 +1894,15 @@ try {
   const historyRow = formatScanHistoryRow(hostileOffer, '2026-06-18');
   const historyColumns = historyRow.split('\t');
   if (
-    historyColumns.length === 7 &&
+    historyColumns.length === 8 &&
     !historyColumns.some(col => /[\r\n\t]/.test(col)) &&
     historyColumns[0] === 'https://jobs.example.com/123|evil' &&
     historyColumns[3].includes('- [ ] https://evil.example/job') &&
     historyColumns[4] === "'=ACME\\Corp | R&D" &&
-    historyColumns[6] === "'@Remote EU"
+    historyColumns[6] === "'@Remote EU" &&
+    historyColumns[7] === 'jds/acme-senior-engineer.md'
   ) {
-    pass('scan-history writer preserves row shape and neutralizes spreadsheet formulas');
+    pass('scan-history writer preserves row shape, appends jd_path, and neutralizes spreadsheet formulas');
   } else {
     fail(`scan-history metadata sanitizer produced unsafe TSV row: ${JSON.stringify(historyColumns)}`);
   }
@@ -2884,6 +2888,18 @@ try {
     fail(`tracker-parse mis-parsed a Location-column row: ${JSON.stringify(rowLoc)}`);
   }
 
+  const withLocationAndJd = [
+    '| # | Date | Company | Role | Location | Score | Status | PDF | Report | JD | Notes |',
+    '|---|------|---------|------|----------|-------|--------|-----|--------|----|-------|',
+    '| 9 | 2026-06-28 | Acme | Eng | Berlin | 4.6/5 | Applied | ✅ | [9](r.md) | ../jds/acme-eng.md | keep |',
+  ];
+  const rowLocJd = parseTrackerRow(withLocationAndJd[2], resolveColumns(withLocationAndJd));
+  if (rowLocJd && rowLocJd.score === '4.6/5' && rowLocJd.status === 'Applied' && rowLocJd.location === 'Berlin' && rowLocJd.jd === '../jds/acme-eng.md' && rowLocJd.notes === 'keep') {
+    pass('tracker-parse maps inserted Location + JD columns without shifting Notes');
+  } else {
+    fail(`tracker-parse mis-parsed a Location+JD row: ${JSON.stringify(rowLocJd)}`);
+  }
+
   const legacy = [
     '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
     '|---|------|---------|------|-------|--------|-----|--------|-------|',
@@ -3049,8 +3065,11 @@ try {
       fail('merge-tracker crashed during report-number collision test (#912)');
     } else {
       const col912Merged = readFileSync(col912Tracker, 'utf-8');
-      const col912Rows = col912Merged.split('\n').filter(l => l.startsWith('| ') && !l.startsWith('| #') && !l.startsWith('|---'));
-      const expectedOtherCoRow = '| 1 | 2026-01-01 | OtherCo | Staff Engineer | 4.0/5 | Evaluated | ❌ | [1](../reports/001-otherco-2026-01-01.md) | original |';
+      const col912Rows = col912Merged.split('\n').filter((l) => {
+        const first = l.split('|')[1]?.trim();
+        return /^\d+$/.test(first || '');
+      });
+      const expectedOtherCoRow = '| 1 | 2026-01-01 | OtherCo | Staff Engineer | 4.0/5 | Evaluated | ❌ | [1](../reports/001-otherco-2026-01-01.md) |  | original |';
 
       if (col912Rows.length === 2) {
         pass('report-number collision (#912): merged tracker has exactly 2 rows');
@@ -3064,7 +3083,7 @@ try {
         fail('report-number collision (#912): OtherCo row was overwritten by NewCo addition');
       }
 
-      const expectedNewCoRow = '| 2 | 2026-01-05 | NewCo | New Role | 2.7/5 | Evaluated | ❌ | [1](../reports/001-newco-2026-01-05.md) | collision |';
+      const expectedNewCoRow = '| 2 | 2026-01-05 | NewCo | New Role | 2.7/5 | Evaluated | ❌ | [1](../reports/001-newco-2026-01-05.md) |  | collision |';
       if (col912Rows.some(r => r.trim() === expectedNewCoRow.trim())) {
         pass('report-number collision (#912): NewCo appended as a new entry with correct data');
       } else {
@@ -3277,10 +3296,10 @@ if (!sqliteAvailable) {
       // 1. Round trip: clean canonical input must export byte-identical.
       const clean =
         '# Applications Tracker\n\n' +
-        '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n' +
-        '|---|------|---------|------|-------|--------|-----|--------|-------|\n' +
-        '| 2 | 2026-01-05 | Beta | Designer | 4.0/5 | Applied | ✅ | [2](../reports/002-beta-2026-01-05.md) | second |\n' +
-        '| 1 | 2026-01-04 | Acme | Engineer | 4.2/5 | Evaluated | ❌ | [1](../reports/001-acme-2026-01-04.md) | first |\n';
+        '| # | Date | Company | Role | Score | Status | PDF | Report | JD | Notes |\n' +
+        '|---|------|---------|------|-------|--------|-----|--------|----|-------|\n' +
+        '| 2 | 2026-01-05 | Beta | Designer | 4.0/5 | Applied | ✅ | [2](../reports/002-beta-2026-01-05.md) |  | second |\n' +
+        '| 1 | 2026-01-04 | Acme | Engineer | 4.2/5 | Evaluated | ❌ | [1](../reports/001-acme-2026-01-04.md) |  | first |\n';
       writeFileSync(md, clean);
       if (trackerRun(['sync']) === null) {
         fail('tracker sync crashed on clean fixture');

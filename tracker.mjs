@@ -39,6 +39,7 @@ import { createHash } from 'crypto';
 import { dirname, resolve, join, basename } from 'path';
 import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
+import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 
 const MD_PATH = process.env.CAREER_OPS_TRACKER || 'data/applications.md';
 const DB_PATH = process.env.CAREER_OPS_TRACKER_DB
@@ -51,8 +52,8 @@ if (resolve(MD_PATH) === resolve(DB_PATH)) {
   process.exit(1);
 }
 const STATES_PATH = 'templates/states.yml';
-const HEADER = '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |';
-const SEPARATOR = '|---|------|---------|------|-------|--------|-----|--------|-------|';
+const HEADER = '| # | Date | Company | Role | Score | Status | PDF | Report | JD | Notes |';
+const SEPARATOR = '|---|------|---------|------|-------|--------|-----|--------|----|-------|';
 
 // ── node:sqlite loading ─────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ function openDb(DatabaseSync) {
       status  TEXT NOT NULL,
       pdf     TEXT NOT NULL DEFAULT '❌',
       report  TEXT NOT NULL DEFAULT '—',
+      jd      TEXT NOT NULL DEFAULT '',
       notes   TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS status_events (
@@ -108,6 +110,8 @@ function openDb(DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_apps_company ON applications(company);
     CREATE INDEX IF NOT EXISTS idx_events_app ON status_events(app_id);
   `);
+  const cols = db.prepare('PRAGMA table_info(applications)').all().map(c => c.name);
+  if (!cols.includes('jd')) db.exec("ALTER TABLE applications ADD COLUMN jd TEXT NOT NULL DEFAULT ''");
   return db;
 }
 
@@ -157,18 +161,25 @@ function repairPlaceholder(cell) {
 // ── Markdown parsing ────────────────────────────────────────────────
 
 function parseMarkdownRows(text, diag) {
+  const lines = text.split('\n');
+  const colmap = resolveColumns(lines);
   const rows = [];
-  for (const line of text.split('\n')) {
+  for (const line of lines) {
     if (!line.trim().startsWith('|')) continue;
-    let cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
-    if (cells.length < 2) continue;
-    if (cells[0] === '#' || /^[-: ]*$/.test(cells.join(''))) continue; // header / separator
-    if (cells.length > 9) {
-      cells = [...cells.slice(0, 8), cells.slice(8).join(' | ')]; // stray pipes → notes
-      if (diag) diag.strayPipes++;
-    }
-    while (cells.length < 9) cells.push('');
-    rows.push(cells);
+    const row = parseTrackerRow(line, colmap);
+    if (!row) continue;
+    rows.push([
+      String(row.num),
+      row.date,
+      row.company,
+      row.role,
+      row.score,
+      row.status,
+      row.pdf,
+      row.report,
+      row.jd || '',
+      row.notes || '',
+    ]);
   }
   return rows;
 }
@@ -211,7 +222,7 @@ function parseTracker(states) {
   const apps = [];
 
   for (const cells of rows) {
-    let [idRaw, date, company, role, score, status, pdf, report, notes] = cells;
+    let [idRaw, date, company, role, score, status, pdf, report, jd, notes] = cells;
 
     const before = [score, pdf, report].join('|');
     score = repairPlaceholder(score);
@@ -247,7 +258,7 @@ function parseTracker(states) {
 
     if (!DATE_RE.test(date)) diag.badDate++; // kept as-is — flagged, not destroyed
 
-    apps.push({ id, pos: apps.length, date, company, role, score: score || '—', status, pdf: pdf || '❌', report: report || '—', notes });
+    apps.push({ id, pos: apps.length, date, company, role, score: score || '—', status, pdf: pdf || '❌', report: report || '—', jd: jd || '', notes });
   }
   for (const app of apps) if (app.id === 0) app.id = ++maxId;
 
@@ -285,8 +296,8 @@ function syncIndex(db, states) {
   db.exec('PRAGMA defer_foreign_keys = ON'); // full rebuild — FKs settle at commit
   try {
     db.exec('DELETE FROM applications');
-    const insertApp = db.prepare('INSERT INTO applications (id, pos, date, company, role, score, status, pdf, report, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    for (const a of apps) insertApp.run(a.id, a.pos, a.date, a.company, a.role, a.score, a.status, a.pdf, a.report, a.notes);
+    const insertApp = db.prepare('INSERT INTO applications (id, pos, date, company, role, score, status, pdf, report, jd, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const a of apps) insertApp.run(a.id, a.pos, a.date, a.company, a.role, a.score, a.status, a.pdf, a.report, a.jd, a.notes);
 
     // Status history: events persist across rebuilds, keyed by id. An app whose
     // status changed since the last sync gets a new event; rows that left the
@@ -356,7 +367,7 @@ function flagValue(args, flag) {
 
 function rowToMarkdown(r) {
   const clean = (v) => String(v ?? '').replace(/\|/g, '│').replace(/\r?\n/g, ' ');
-  return `| ${r.id} | ${clean(r.date)} | ${clean(r.company)} | ${clean(r.role)} | ${clean(r.score)} | ${clean(r.status)} | ${clean(r.pdf)} | ${clean(r.report)} | ${clean(r.notes)} |`;
+  return `| ${r.id} | ${clean(r.date)} | ${clean(r.company)} | ${clean(r.role)} | ${clean(r.score)} | ${clean(r.status)} | ${clean(r.pdf)} | ${clean(r.report)} | ${clean(r.jd)} | ${clean(r.notes)} |`;
 }
 
 async function query(args) {
@@ -385,7 +396,7 @@ async function query(args) {
   const id = flagValue(args, '--id');
   if (id) { where.push('id = ?'); params.push(parseInt(id, 10)); }
 
-  let sql = 'SELECT id, date, company, role, score, status, pdf, report, notes FROM applications'
+  let sql = 'SELECT id, date, company, role, score, status, pdf, report, jd, notes FROM applications'
     + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC';
   const limit = parseInt(flagValue(args, '--limit') || '0', 10);
   if (limit > 0) { sql += ' LIMIT ?'; params.push(limit); }

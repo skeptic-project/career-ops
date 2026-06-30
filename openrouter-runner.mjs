@@ -23,6 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import yaml from 'js-yaml';
+import { persistJobDescriptionForOffer, persistJobDescriptionsForOffers } from './jd-store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -466,7 +467,7 @@ function markPipelineDone(url) {
 }
 
 function addToPipeline(entries) {
-  const history = readFile('data/scan-history.tsv') ?? 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation\n';
+  const history = readFile('data/scan-history.tsv') ?? 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation\tjd_path\n';
   const seenUrls = new Set(history.split('\n').slice(1).map(l => l.split('\t')[0]).filter(Boolean));
 
   const existingPipeline = readFile('data/pipeline.md') ?? '# Pipeline\n\n## Pending\n';
@@ -483,6 +484,7 @@ function addToPipeline(entries) {
     if (appliedUrls.has(e.url)) return false;
     // skip if already queued in pipeline
     if (existingPipeline.includes(e.url)) return false;
+    if (e.jdPath && existingPipeline.includes(`local:${e.jdPath}`)) return false;
     return true;
   });
 
@@ -493,8 +495,9 @@ function addToPipeline(entries) {
   let hist = history;
 
   for (const e of newEntries) {
-    pipeline += `- [ ] ${e.url} | ${e.company} | ${e.role}\n`;
-    hist     += `${e.url}\t${today}\tscan\t${e.role}\t${e.company}\tadded\t${e.location ?? ''}\n`;
+    const ref = e.jdPath ? `local:${e.jdPath}` : e.url;
+    pipeline += `- [ ] ${ref} | ${e.company} | ${e.role}\n`;
+    hist     += `${e.url}\t${today}\tscan\t${e.role}\t${e.company}\tadded\t${e.location ?? ''}\t${e.jdPath ?? ''}\n`;
   }
 
   writeFile('data/pipeline.md', pipeline);
@@ -563,7 +566,12 @@ async function cmdScan() {
     }
   }
 
-  const added = addToPipeline(found);
+  const today = new Date().toISOString().split('T')[0];
+  const foundWithJds = await persistJobDescriptionsForOffers(
+    found.map(j => ({ ...j, title: j.role })),
+    { date: today },
+  );
+  const added = addToPipeline(foundWithJds);
   console.log(`\n✅ Scan complete. ${found.length} matches, ${added} new entries added to pipeline.md.`);
   if (added > 0) {
     console.log('\n→  node openrouter-runner.mjs pipeline\n   to evaluate pending listings.\n');
@@ -575,6 +583,8 @@ async function cmdEvaluate(input, ctx) {
   const modeContent = readFile('modes/oferta.md') ?? readFile('modes/auto-pipeline.md') ?? '';
 
   let jdText = input;
+  let jdPath = '';
+  let fetchedContent = '';
 
   if (!input) {
     // Interactive paste mode
@@ -591,10 +601,20 @@ async function cmdEvaluate(input, ctx) {
     }
     jdText = lines.join('\n');
     if (!jdText.trim()) { console.log('No input provided.'); return null; }
+  } else if (input.startsWith('local:')) {
+    const localPath = input.replace(/^local:/, '');
+    const content = readFile(localPath);
+    if (!content) {
+      console.error(`Could not read local JD: ${localPath}`);
+      return null;
+    }
+    jdPath = localPath;
+    jdText = content;
   } else if (input.startsWith('http')) {
     console.log('Fetching job page...');
     try {
       const content = await fetchJobPage(input);
+      fetchedContent = content;
       jdText = `URL: ${input}\n\n${content}`;
     } catch (e) {
       console.error(e.message);
@@ -629,10 +649,21 @@ async function cmdEvaluate(input, ctx) {
   const scoreValue  = scoreMatch ? parseFloat(scoreMatch[1]) : NaN;
   const scoreStr    = isFinite(scoreValue) ? `${scoreValue.toFixed(1)}/5` : '';
   const companyName = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if (typeof input === 'string' && input.startsWith('http') && fetchedContent) {
+    const persisted = await persistJobDescriptionForOffer({
+      url: input,
+      company: companyName,
+      title: '(see report)',
+      description: fetchedContent,
+    }, { date: today });
+    jdPath = persisted.jdPath || '';
+  } else if (typeof input === 'string' && input.startsWith('local:')) {
+    jdPath = input.replace(/^local:/, '');
+  }
   const reportLink  = `[${numStr}](reports/${numStr}-${slug}-${today}.md)`;
-  const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t❌\t${reportLink}\t\n`;
+  const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t❌\t${reportLink}\t${jdPath}\t\n`;
   const tsvFile     = `batch/tracker-additions/or-${numStr}-${slug}.tsv`;
-  writeFile(tsvFile, `num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tnotes\n${tsvLine}`);
+  writeFile(tsvFile, `num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tjd\tnotes\n${tsvLine}`);
 
   console.log(`\n✅ Report saved: ${relPath}`);
   console.log('\n─── EVALUATION ──────────────────────────────────────\n');

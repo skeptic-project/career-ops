@@ -51,6 +51,7 @@ const TRACKER_LOCK_DIR = resolveTrackerLockDir(process.env.CAREER_OPS_TRACKER_LO
 // The reports/ dir sits at the repo root, which is the tracker's parent in the
 // data/ layout (data/applications.md) and the tracker's own dir at root layout.
 const REPORTS_ROOT = basename(TRACKER_DIR) === 'data' ? dirname(TRACKER_DIR) : TRACKER_DIR;
+const JDS_ROOT = basename(TRACKER_DIR) === 'data' ? dirname(TRACKER_DIR) : TRACKER_DIR;
 
 /**
  * Normalize report links before writing them into the tracker file.
@@ -64,6 +65,8 @@ const REPORTS_ROOT = basename(TRACKER_DIR) === 'data' ? dirname(TRACKER_DIR) : T
  * @returns {string} Markdown report link relative to the tracker file.
  */
 const normalizeReportLink = (reportField) => normalizeLink(reportField, TRACKER_DIR, REPORTS_ROOT);
+
+const normalizeJdLink = (jdField) => normalizePathLink(jdField, TRACKER_DIR, JDS_ROOT);
 
 // Ensure required directories exist (fresh setup)
 mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
@@ -444,13 +447,81 @@ function cell(v) {
   return String(v ?? '').replace(/[\r\n]+/g, ' ').replace(/\s*\|\s*/g, ' / ').trim();
 }
 
+function splitMarkdownRow(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+}
+
+function buildMarkdownRow(cells) {
+  return `| ${cells.join(' | ')} |`;
+}
+
+function ensureJdColumn(content) {
+  const lines = content.split('\n');
+  const headerIdx = lines.findIndex((line) => {
+    if (!line.startsWith('|')) return false;
+    const cells = splitMarkdownRow(line).map(c => c.toLowerCase());
+    return cells.includes('company') && cells.includes('role') && cells.includes('report');
+  });
+  if (headerIdx === -1) return { content, changed: false };
+  const headerCells = splitMarkdownRow(lines[headerIdx]);
+  const lower = headerCells.map(c => c.toLowerCase());
+  if (lower.includes('jd')) return { content, changed: false };
+  const reportIdx = lower.indexOf('report');
+  if (reportIdx === -1) return { content, changed: false };
+
+  const out = lines.map((line, idx) => {
+    if (!line.startsWith('|')) return line;
+    const cells = splitMarkdownRow(line);
+    if (idx === headerIdx) {
+      cells.splice(reportIdx + 1, 0, 'JD');
+      return buildMarkdownRow(cells);
+    }
+    if (/^[-: ]+$/.test(cells.join(''))) {
+      cells.splice(reportIdx + 1, 0, '----');
+      return `|${cells.join('|')}|`;
+    }
+    const num = parseInt(cells[0], 10);
+    if (Number.isNaN(num) || cells.length <= reportIdx) return line;
+    cells.splice(reportIdx + 1, 0, '');
+    return buildMarkdownRow(cells);
+  });
+
+  return { content: out.join('\n'), changed: true };
+}
+
+function normalizePathLink(pathField, trackerDir, rootDir) {
+  const raw = String(pathField ?? '').trim().replace(/^local:/, '');
+  if (!raw || raw === '—') return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return raw;
+  const normalized = raw.replace(/\\/g, '/');
+  if (normalized.startsWith('../') || normalized.startsWith('./')) return normalized;
+  return relative(trackerDir, join(rootDir, normalized)).split(sep).join('/');
+}
+
 // Build a tracker row string matching the detected layout (with or without the
 // optional Location column) so writes round-trip through the same schema.
 function buildRow(o) {
-  if (COLMAP.location != null) {
-    return `| ${o.num} | ${o.date} | ${cell(o.company)} | ${cell(o.role)} | ${cell(o.location) || '—'} | ${o.score} | ${o.status} | ${o.pdf} | ${o.report} | ${cell(o.notes)} |`;
+  const byIndex = new Map(Object.entries(COLMAP).map(([key, index]) => [index, key]));
+  const maxIdx = Math.max(...Object.values(COLMAP));
+  const values = {
+    num: o.num,
+    date: o.date,
+    company: cell(o.company),
+    role: cell(o.role),
+    location: cell(o.location) || '—',
+    score: o.score,
+    status: o.status,
+    pdf: o.pdf,
+    report: o.report,
+    jd: cell(o.jd),
+    notes: cell(o.notes),
+  };
+  const cells = [];
+  for (let i = 1; i <= maxIdx; i++) {
+    const key = byIndex.get(i);
+    if (key) cells.push(values[key] ?? '');
   }
-  return `| ${o.num} | ${o.date} | ${cell(o.company)} | ${cell(o.role)} | ${o.score} | ${o.status} | ${o.pdf} | ${o.report} | ${cell(o.notes)} |`;
+  return `| ${cells.join(' | ')} |`;
 }
 
 /**
@@ -479,9 +550,14 @@ function parseAppLine(line) {
     status: parts[COLMAP.status],
     pdf: parts[COLMAP.pdf],
     report: parts[COLMAP.report],
+    jd: COLMAP.jd != null ? parts[COLMAP.jd] : '',
     notes: COLMAP.notes != null ? (parts[COLMAP.notes] || '') : '',
     raw: line,
   };
+}
+
+function looksLikeJdPath(value) {
+  return /^(?:local:)?jds\/.+\.md$/i.test(String(value ?? '').trim());
 }
 
 /**
@@ -499,6 +575,40 @@ function parseAppLine(line) {
 function parseTsvContent(content, filename) {
   content = content.trim();
   if (!content) return null;
+  const contentLines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const headerLine = contentLines.find(line => /^[a-z_#]+\t/i.test(line) && /\bcompany\b/i.test(line) && /\brole\b/i.test(line));
+  const dataLine = contentLines.find(line => /^\d+\t/.test(line) || line.startsWith('|')) || contentLines[contentLines.length - 1];
+  if (headerLine && dataLine && !dataLine.startsWith('|')) {
+    const headers = headerLine.split('\t').map(h => h.trim().toLowerCase());
+    const values = dataLine.split('\t');
+    const get = (name) => {
+      const idx = headers.indexOf(name);
+      return idx === -1 ? '' : (values[idx] || '');
+    };
+    const statusRaw = get('status');
+    const scoreRaw = get('score');
+    const addition = {
+      num: parseInt(get('num') || get('#')),
+      date: get('date'),
+      company: get('company'),
+      role: get('role'),
+      status: validateStatus(statusRaw),
+      score: scoreRaw,
+      pdf: get('pdf'),
+      report: get('report'),
+      jd: get('jd'),
+      notes: get('notes'),
+      location: get('location'),
+    };
+    if (isNaN(addition.num) || addition.num === 0) {
+      console.warn(`⚠️  Skipping ${filename}: invalid entry number`);
+      return null;
+    }
+    return addition;
+  }
+  if (contentLines.length > 1) {
+    content = dataLine;
+  }
 
   let parts;
   let addition;
@@ -520,8 +630,9 @@ function parseTsvContent(content, filename) {
       status: validateStatus(parts[5]),
       pdf: parts[6],
       report: parts[7],
-      notes: parts[8] || '',
-      location: (parts[9] || '').trim(),
+      jd: (looksLikeJdPath(parts[8]) || parts[8] === '') ? parts[8] : '',
+      notes: (looksLikeJdPath(parts[8]) || parts[8] === '') ? (parts[9] || '') : (parts[8] || ''),
+      location: (looksLikeJdPath(parts[8]) || parts[8] === '') ? (parts[10] || '').trim() : (parts[9] || '').trim(),
     };
   } else {
     // Tab-separated
@@ -555,6 +666,15 @@ function parseTsvContent(content, filename) {
       statusCol = col4; scoreCol = col5;
     }
 
+    let jdCol = '';
+    let notesCol = parts[8] || '';
+    let locationCol = (parts[9] || '').trim();
+    if (parts.length >= 10 && (looksLikeJdPath(parts[8]) || parts[8].trim() === '')) {
+      jdCol = parts[8];
+      notesCol = parts[9] || '';
+      locationCol = (parts[10] || '').trim();
+    }
+
     addition = {
       num: parseInt(parts[0]),
       date: parts[1],
@@ -564,9 +684,10 @@ function parseTsvContent(content, filename) {
       score: scoreCol,
       pdf: parts[6],
       report: parts[7],
-      notes: parts[8] || '',
+      jd: jdCol,
+      notes: notesCol,
       // Optional trailing field: tab-separated TSVs may append a location.
-      location: (parts[9] || '').trim(),
+      location: locationCol,
     };
   }
 
@@ -585,7 +706,13 @@ if (!existsSync(APPS_FILE)) {
   console.log('No applications.md found. Nothing to merge into.');
   process.exit(0);
 }
-const appContent = readFileSync(APPS_FILE, 'utf-8');
+let appContent = readFileSync(APPS_FILE, 'utf-8');
+const schemaMigration = ensureJdColumn(appContent);
+if (schemaMigration.changed) {
+  appContent = schemaMigration.content;
+  if (!DRY_RUN) writeFileAtomic(APPS_FILE, appContent);
+  console.log('🧾 Added JD column to tracker schema.');
+}
 // Test-only synchronization hook: the concurrent merge test waits for the
 // first worker to read the tracker while still holding the lock, then starts a
 // second worker to prove the lock prevents the old lost-update race.
@@ -670,6 +797,7 @@ for (const file of tsvFiles) {
   // The TSV convention carries a root-relative `reports/...` link; rewrite it
   // so it resolves correctly when clicked from applications.md (see #760).
   addition.report = normalizeReportLink(addition.report);
+  addition.jd = normalizeJdLink(addition.jd);
 
   // Check for duplicate by:
   // 1. Exact report number match
@@ -725,6 +853,7 @@ for (const file of tsvFiles) {
           location: addition.location || duplicate.location || '—',
           score: addition.score, status: duplicate.status, pdf: duplicate.pdf,
           report: addition.report,
+          jd: addition.jd || duplicate.jd || '',
           notes: `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,
         });
         appLines[lineIdx] = updatedLine;
@@ -743,7 +872,7 @@ for (const file of tsvFiles) {
       num: entryNum, date: addition.date, company: addition.company, role: addition.role,
       location: addition.location || '—',
       score: addition.score, status: addition.status, pdf: addition.pdf,
-      report: addition.report, notes: addition.notes,
+      report: addition.report, jd: addition.jd || '', notes: addition.notes,
     });
     newLines.push(newLine);
     added++;
