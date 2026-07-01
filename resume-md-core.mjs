@@ -1,7 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { basename, join } from 'path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { fetchJobDescriptionText, readJobDescriptionMetadata } from './jd-store.mjs';
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
 
 const STOPWORDS = new Set([
   'about', 'above', 'across', 'after', 'again', 'against', 'also', 'and', 'any', 'are',
@@ -100,9 +103,12 @@ export function createTargetedReplacements(cvMarkdown, jdText) {
   if (summaryMatch) {
     const current = summaryMatch[2];
     const selected = keywords.slice(0, 8).join(', ');
-    const replacement = current.includes('JD-aligned focus:')
+    const focusSentence = selected
+      ? ` Role-relevant focus areas include ${selected}.`
+      : '';
+    const replacement = !focusSentence || current.includes('Role-relevant focus areas include')
       ? current
-      : `${current}\n\nJD-aligned focus: ${selected}.`;
+      : `${current}${focusSentence}`;
     if (replacement !== current) replacements.push({ before: current, after: replacement });
   }
   return replacements;
@@ -143,20 +149,53 @@ export function buildResumeMarkdownPath({ candidateName, company }) {
   return join('output', `cv-${slugifyName(candidateName, 'candidate')}-${slugifyName(company, 'company')}.md`);
 }
 
+function assertSafeRemoteUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Refusing non-HTTP(S) URL: ${url}`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const blocked = host === 'localhost' || host === '::1' || host.endsWith('.local') ||
+    /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  if (blocked) throw new Error(`Refusing private/loopback host: ${host}`);
+}
+
+function readWorkspaceFile(relPath, allowedPrefixes) {
+  const normalized = String(relPath || '').replace(/^local:/, '');
+  const full = resolve(ROOT, normalized);
+  const rel = relative(ROOT, full).replace(/\\/g, '/');
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(`Refusing to read outside the workspace: ${normalized}`);
+  }
+  if (!allowedPrefixes.some(prefix => rel === prefix || rel.startsWith(`${prefix}/`))) {
+    throw new Error(`Unsupported local input path: ${normalized}`);
+  }
+  return { text: readFileSync(full, 'utf-8'), rel };
+}
+
 export async function resolveJobDescriptionInput(input) {
   const source = String(input || '').trim();
   if (!source) throw new Error('No job description input provided');
   if (source.startsWith('local:')) {
-    const localPath = source.replace(/^local:/, '');
-    return { text: readFileSync(localPath, 'utf-8'), source, jdPath: localPath };
+    const local = readWorkspaceFile(source, ['jds', 'reports']);
+    return { text: local.text, source: `local:${local.rel}`, jdPath: local.rel.startsWith('jds/') ? local.rel : '' };
   }
   if (/^jds\/.+\.md$/i.test(source)) {
-    return { text: readFileSync(source, 'utf-8'), source: `local:${source}`, jdPath: source };
+    const local = readWorkspaceFile(source, ['jds']);
+    return { text: local.text, source: `local:${local.rel}`, jdPath: local.rel };
   }
   if (/^reports\/.+\.md$/i.test(source)) {
-    return { text: readFileSync(source, 'utf-8'), source, jdPath: '' };
+    const local = readWorkspaceFile(source, ['reports']);
+    return { text: local.text, source: local.rel, jdPath: '' };
   }
   if (/^https?:\/\//i.test(source)) {
+    assertSafeRemoteUrl(source);
     const text = await fetchJobDescriptionText(source);
     if (!text) throw new Error(`Could not extract job description from URL: ${source}`);
     return { text: `URL: ${source}\n\n${text}`, source, jdPath: '' };
@@ -176,8 +215,8 @@ export async function writeTailoredResumeMarkdown({
   const tailored = tailorResumeMarkdown(cvMarkdown, resolved.text);
   const final = estimateResumeMatchScore(resolved.text, tailored.markdown);
   const outputPath = buildResumeMarkdownPath({ candidateName, company });
-  mkdirSync('output', { recursive: true });
-  writeFileSync(outputPath, tailored.markdown, 'utf-8');
+  mkdirSync(resolve(ROOT, 'output'), { recursive: true });
+  writeFileSync(resolve(ROOT, outputPath), tailored.markdown, 'utf-8');
   return {
     path: outputPath,
     company,

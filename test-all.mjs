@@ -1732,6 +1732,7 @@ try {
     tailorResumeMarkdown,
     estimateResumeMatchScore,
     buildResumeMarkdownPath,
+    resolveJobDescriptionInput,
   } = await import(pathToFileURL(join(ROOT, 'resume-md-core.mjs')).href);
   const baseCv = `# Jane Doe
 
@@ -1753,7 +1754,7 @@ Engineering Manager with platform experience.
   tailored.markdown.startsWith('# Jane Doe\n\n## Professional Summary\n\n')
     ? pass('resume-md preserves markdown heading structure')
     : fail('resume-md changed markdown heading structure');
-  tailored.replacements.length === 1 && tailored.markdown.includes('JD-aligned focus:')
+  tailored.replacements.length === 1 && tailored.markdown.includes('Role-relevant focus areas include')
     ? pass('resume-md uses targeted replacement for JD alignment')
     : fail('resume-md did not apply the expected targeted replacement');
   /^output\/cv-jane-doe-acme-inc\.md$/.test(pathOut)
@@ -1762,6 +1763,14 @@ Engineering Manager with platform experience.
   /^\d\.\d\/5$|^N\/A$/.test(finalScore.score)
     ? pass('resume-md final-score has tracker-compatible format')
     : fail(`resume-md final-score invalid: ${finalScore.score}`);
+  try {
+    await resolveJobDescriptionInput('http://127.0.0.1/internal-job');
+    fail('resume-md URL guard should reject loopback hosts');
+  } catch (err) {
+    /Refusing private\/loopback/.test(err.message)
+      ? pass('resume-md URL guard rejects loopback hosts')
+      : fail(`resume-md URL guard rejected with unexpected error: ${err.message}`);
+  }
 } catch (e) {
   fail(`resume-md core crashed: ${e.message}`);
 }
