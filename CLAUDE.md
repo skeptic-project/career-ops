@@ -192,8 +192,8 @@ If `data/applications.md` doesn't exist, create it:
 ```markdown
 # Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
+| # | Date | Company | Role | Score | Status | resume-md | final-score | PDF | Report | JD | Notes |
+|---|------|---------|------|-------|--------|---|---|-----|--------|----|-------|
 ```
 
 #### Step 5: Get to know the user (important for quality)

@@ -5,7 +5,7 @@ Read and display `data/applications.md`.
 **Tracker Format:**
 
 ```markdown
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+| # | Date | Company | Role | Score | Status | resume-md | final-score | PDF | Report | JD | Notes |
 ```
 
 Possible states: `Evaluated` → `Applied` → `Responded` → `Interview` → `Offer` / `Rejected` / `Discarded` / `SKIP`

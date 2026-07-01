@@ -1723,6 +1723,49 @@ if (!hasBrowser) {
   }
 }
 
+// ── 12b. RESUME-MD CORE ─────────────────────────────────────────
+
+console.log('\n12b. Resume Markdown tailoring');
+
+try {
+  const {
+    tailorResumeMarkdown,
+    estimateResumeMatchScore,
+    buildResumeMarkdownPath,
+  } = await import(pathToFileURL(join(ROOT, 'resume-md-core.mjs')).href);
+  const baseCv = `# Jane Doe
+
+## Professional Summary
+
+Engineering Manager with platform experience.
+
+---
+
+## Skills
+
+- Node.js
+`;
+  const jd = 'Engineering Manager role for cloud-hosted SaaS reliability, SDLC, code reviews, uptime, mentoring, and stakeholder communication.';
+  const tailored = tailorResumeMarkdown(baseCv, jd);
+  const finalScore = estimateResumeMatchScore(jd, tailored.markdown);
+  const pathOut = buildResumeMarkdownPath({ candidateName: 'Jane Doe', company: 'Acme Inc.' });
+
+  tailored.markdown.startsWith('# Jane Doe\n\n## Professional Summary\n\n')
+    ? pass('resume-md preserves markdown heading structure')
+    : fail('resume-md changed markdown heading structure');
+  tailored.replacements.length === 1 && tailored.markdown.includes('JD-aligned focus:')
+    ? pass('resume-md uses targeted replacement for JD alignment')
+    : fail('resume-md did not apply the expected targeted replacement');
+  /^output\/cv-jane-doe-acme-inc\.md$/.test(pathOut)
+    ? pass('resume-md output path uses candidate and company slugs')
+    : fail(`resume-md output path unexpected: ${pathOut}`);
+  /^\d\.\d\/5$|^N\/A$/.test(finalScore.score)
+    ? pass('resume-md final-score has tracker-compatible format')
+    : fail(`resume-md final-score invalid: ${finalScore.score}`);
+} catch (e) {
+  fail(`resume-md core crashed: ${e.message}`);
+}
+
 // ── 13. LOCATION FILTER — always_allow tier ───────────────────────
 
 console.log('\n13. Location filter — always_allow tier');

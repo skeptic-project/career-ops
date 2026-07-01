@@ -87,6 +87,8 @@ const SYSTEM_PATHS = [
   'KIMI.md',
   'build-dashboard.mjs',
   'generate-pdf.mjs',
+  'resume-md.mjs',
+  'resume-md-core.mjs',
   'generate-latex.mjs',
   'archive-posting.mjs',
   'jd-store.mjs',

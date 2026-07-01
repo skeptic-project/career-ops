@@ -415,12 +415,19 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
       tsvSafe(role),
       'Evaluated',
       normalizedTrackerScore(score),
+      '—',
+      '—',
       '❌',
       `[${num}](reports/${filename})`,
       '',
       'Gemini evaluation',
     ];
-    writeFileSync(trackerPath, `${trackerFields.join('\t')}\n`, 'utf-8');
+    writeFileSync(
+      trackerPath,
+      'num\tdate\tcompany\trole\tstatus\tscore\tresume-md\tfinal-score\tpdf\treport\tjd\tnotes\n' +
+        `${trackerFields.join('\t')}\n`,
+      'utf-8'
+    );
     console.log(`\n✅  Report saved: reports/${filename}`);
     console.log(`📊  Tracker addition saved: batch/tracker-additions/${num}-${companySlug}.tsv`);
     reportSaved = true;

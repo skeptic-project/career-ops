@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import yaml from 'js-yaml';
 import { persistJobDescriptionForOffer, persistJobDescriptionsForOffers } from './jd-store.mjs';
+import { writeTailoredResumeMarkdown } from './resume-md-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -338,6 +339,16 @@ function buildSystemPrompt(modeContent, ctx) {
     'CV (Markdown):',
     ctx.cv,
   ].filter(Boolean).join('\n\n');
+}
+
+function autoPdfScoreThreshold() {
+  try {
+    const profile = yaml.load(readFile('config/profile.yml') || '') || {};
+    const threshold = Number(profile.auto_pdf_score_threshold ?? 3.0);
+    return Number.isFinite(threshold) ? threshold : 3.0;
+  } catch {
+    return 3.0;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -660,10 +671,24 @@ async function cmdEvaluate(input, ctx) {
   } else if (typeof input === 'string' && input.startsWith('local:')) {
     jdPath = input.replace(/^local:/, '');
   }
+  let resumeMdPath = '';
+  let finalScore = '';
+  if (isFinite(scoreValue) && scoreValue >= autoPdfScoreThreshold()) {
+    try {
+      const resumeResult = await writeTailoredResumeMarkdown({
+        input: jdPath ? `local:${jdPath}` : jdText,
+      });
+      resumeMdPath = resumeResult.path;
+      finalScore = resumeResult.finalScore;
+    } catch (err) {
+      finalScore = 'N/A';
+      console.warn(`[resume-md] ${err.message}`);
+    }
+  }
   const reportLink  = `[${numStr}](reports/${numStr}-${slug}-${today}.md)`;
-  const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t❌\t${reportLink}\t${jdPath}\t\n`;
+  const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t${resumeMdPath}\t${finalScore}\t❌\t${reportLink}\t${jdPath}\t\n`;
   const tsvFile     = `batch/tracker-additions/or-${numStr}-${slug}.tsv`;
-  writeFile(tsvFile, `num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tjd\tnotes\n${tsvLine}`);
+  writeFile(tsvFile, `num\tdate\tcompany\trole\tstatus\tscore\tresume-md\tfinal-score\tpdf\treport\tjd\tnotes\n${tsvLine}`);
 
   console.log(`\n✅ Report saved: ${relPath}`);
   console.log('\n─── EVALUATION ──────────────────────────────────────\n');
@@ -671,6 +696,20 @@ async function cmdEvaluate(input, ctx) {
   console.log('\n─────────────────────────────────────────────────────\n');
 
   return relPath;
+}
+
+// -- RESUME-MD --
+async function cmdResumeMd(input) {
+  if (!input) {
+    console.error('Usage: node openrouter-runner.mjs resume-md <job-description-url|local:jds/file.md|jds/file.md|reports/file.md|jd text>');
+    return;
+  }
+  const result = await writeTailoredResumeMarkdown({ input });
+  console.log(`\n✅ Markdown resume saved: ${result.path}`);
+  console.log(`Company: ${result.company}`);
+  console.log(`Role: ${result.role}`);
+  console.log(`final-score: ${result.finalScore}`);
+  console.log(`Targeted replacements: ${result.replacements.length}`);
 }
 
 // -- PIPELINE --
@@ -769,6 +808,10 @@ if (invokedDirectly) switch (command) {
     await cmdPipeline(ctx);
     break;
 
+  case 'resume-md':
+    await cmdResumeMd(args.join(' ').trim() || null);
+    break;
+
   case 'apply':
     if (!args[0]) { console.error('Usage: node openrouter-runner.mjs apply <report_num|report_path>'); break; }
     await cmdApply(args[0], ctx);
@@ -786,6 +829,7 @@ Auto-fetches free models from OpenRouter API and rotates through them with fallb
 COMMANDS:
   node openrouter-runner.mjs scan              → Scan Greenhouse APIs for new matching listings
   node openrouter-runner.mjs evaluate <url>    → Evaluate a listing by URL
+  node openrouter-runner.mjs resume-md <jd>    → Tailor CV and save Markdown only
   node openrouter-runner.mjs evaluate          → Paste a job description interactively
   node openrouter-runner.mjs pipeline          → Batch-evaluate all pending entries in pipeline.md
   node openrouter-runner.mjs apply <report_no> → Generate application form answers from a report

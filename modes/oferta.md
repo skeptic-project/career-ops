@@ -290,6 +290,8 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 - Role
 - Score: match average (1-5)
 - Status: `Evaluated`
+- resume-md: root-relative tailored Markdown resume path when generated, otherwise `—`
+- final-score: tailored-resume score when generated, otherwise `—`
 - PDF: ❌ (or ✅ if auto-pipeline generated PDF)
 - Report: root-relative link `[001](reports/001-company-2026-01-01.md)` (when merged via `merge-tracker.mjs` it is normalized to be relative to the tracker's own dir, e.g. `../reports/...`; see #760)
 - JD: root-relative path `jds/company-role.md` when available (merged as `../jds/company-role.md` from `data/applications.md`)
@@ -297,5 +299,5 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Tracker format:**
 
 ```markdown
-| # | Date | Company | Role | Score | Status | PDF | Report | JD | Notes |
+| # | Date | Company | Role | Score | Status | resume-md | final-score | PDF | Report | JD | Notes |
 ```

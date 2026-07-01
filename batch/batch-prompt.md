@@ -392,10 +392,12 @@ Formato TSV (una sola línea, sin header, 10 columnas tab-separated):
 | 4 | role | string | `Staff AI Engineer` | Título del rol |
 | 5 | status | canonical | `Evaluada` | DEBE ser canónico (ver states.yml) |
 | 6 | score | X.XX/5 | `4.55/5` | O `N/A` si no evaluable |
-| 7 | pdf | emoji | `✅` o `❌` | Si se generó PDF |
-| 8 | report | md link | `[647](reports/647-...)` | Link root-relative; merge-tracker.mjs lo normaliza relativo al tracker (ej. `../reports/...`, #760) |
-| 9 | jd | path | `jds/datadog-staff-ai-engineer.md` | Ruta root-relative al JD local; vacío solo si no se pudo capturar |
-| 10 | notes | string | `APPLY HIGH...` | Resumen 1 frase |
+| 7 | resume-md | path | `output/cv-candidate-datadog.md` | Ruta root-relative al CV Markdown adaptado; `—` si no se generó |
+| 8 | final-score | X.XX/5 | `4.70/5` | Score recalculado contra el CV Markdown adaptado; `—` o `N/A` si no aplica |
+| 9 | pdf | emoji | `✅` o `❌` | Si se generó PDF |
+| 10 | report | md link | `[647](reports/647-...)` | Link root-relative; merge-tracker.mjs lo normaliza relativo al tracker (ej. `../reports/...`, #760) |
+| 11 | jd | path | `jds/datadog-staff-ai-engineer.md` | Ruta root-relative al JD local; vacío solo si no se pudo capturar |
+| 12 | notes | string | `APPLY HIGH...` | Resumen 1 frase |
 
 **IMPORTANTE:** El orden TSV tiene status ANTES de score (col 5→status, col 6→score). En applications.md el orden es inverso (col 5→score, col 6→status). merge-tracker.mjs maneja la conversión.
 

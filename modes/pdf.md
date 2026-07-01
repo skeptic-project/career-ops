@@ -2,7 +2,7 @@
 
 ## Full pipeline
 
-1. Read `cv.md` as the source of truth
+1. Read the resume Markdown source: use the tailored `resume-md` file when auto-pipeline generated one for this JD; otherwise read `cv.md` as the source of truth
 2. Ask the user for the JD if it is not in context (text or URL)
 3. Extract 15-20 keywords from the JD
 4. Detect JD language → CV language (EN default)
@@ -19,7 +19,7 @@
 13. Apply the six-second clarity gate from `modes/heuristics/recruiter-side.md`: top third must make target role, strongest fit, and proof obvious
 14. Generate full HTML from template + personalized content
 15. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
-16. Write HTML to `output/cv-{candidate}-{company}.html` (NOT a temp dir — the recorded HTML is what the dashboard's `D` hotkey regenerates from, so it must survive temp cleanup)
+16. Write HTML to `output/cv-{candidate}-{company}.html` from the selected Markdown source (NOT a temp dir — the recorded HTML is what the dashboard's `D` hotkey regenerates from, so it must survive temp cleanup)
 17. Execute: `node generate-pdf.mjs output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}` — `{report number}` is the NNN from the report filename/link (e.g. `008` for `reports/008-acme-….md`), not the tracker `#` column. Pass it whenever the application has (or will have) a report; it records the PDF↔report linkage in `data/pdf-index.tsv` so the dashboard can open and regenerate the exact PDF. Omit it only for one-off CVs with no tracker entry.
 18. Report: PDF path, number of pages, keyword coverage %
 
