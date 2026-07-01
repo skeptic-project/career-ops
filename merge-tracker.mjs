@@ -626,6 +626,15 @@ function looksLikeJdPath(value) {
   return /^(?:local:)?jds\/.+\.md$/i.test(String(value ?? '').trim());
 }
 
+function looksLikeResumeMdPath(value) {
+  return /^output\/.+\.md$/i.test(String(value ?? '').trim());
+}
+
+function looksLikePdfCell(value) {
+  const text = String(value ?? '').trim();
+  return text === '' || text === '—' || text === '✅' || text === '❌' || /^output\/.+\.pdf$/i.test(text);
+}
+
 /**
  * Parse a TSV file content into a structured addition object.
  *
@@ -736,10 +745,32 @@ function parseTsvContent(content, filename) {
       statusCol = col4; scoreCol = col5;
     }
 
+    let resumeMdCol = '';
+    let finalScoreCol = '';
+    let pdfCol = parts[6];
+    let reportCol = parts[7];
     let jdCol = '';
     let notesCol = parts[8] || '';
     let locationCol = (parts[9] || '').trim();
-    if (parts.length >= 10 && (looksLikeJdPath(parts[8]) || parts[8].trim() === '')) {
+
+    // Expanded tracker-addition TSV:
+    // num date company role status score resume-md final-score pdf report jd notes [location]
+    // Keep this before the legacy JD parser so `pdf`/`report` do not shift into
+    // the wrong fields once resume-md/final-score are present.
+    const hasExpandedResumeLayout = parts.length >= 12 && (
+      looksLikeResumeMdPath(parts[6]) ||
+      parts[6].trim() === '' ||
+      parts[6].trim() === '—'
+    ) && looksLikePdfCell(parts[8]);
+    if (hasExpandedResumeLayout) {
+      resumeMdCol = parts[6] || '';
+      finalScoreCol = parts[7] || '';
+      pdfCol = parts[8] || '';
+      reportCol = parts[9] || '';
+      jdCol = parts[10] || '';
+      notesCol = parts[11] || '';
+      locationCol = (parts[12] || '').trim();
+    } else if (parts.length >= 10 && (looksLikeJdPath(parts[8]) || parts[8].trim() === '')) {
       jdCol = parts[8];
       notesCol = parts[9] || '';
       locationCol = (parts[10] || '').trim();
@@ -752,10 +783,10 @@ function parseTsvContent(content, filename) {
       role: parts[3],
       status: validateStatus(statusCol),
       score: scoreCol,
-      resumeMd: '',
-      finalScore: '',
-      pdf: parts[6],
-      report: parts[7],
+      resumeMd: resumeMdCol,
+      finalScore: finalScoreCol,
+      pdf: pdfCol,
+      report: reportCol,
       jd: jdCol,
       notes: notesCol,
       // Optional trailing field: tab-separated TSVs may append a location.

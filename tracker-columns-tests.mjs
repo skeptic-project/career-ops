@@ -92,11 +92,19 @@ const HEADER_JD = `# Applications Tracker
 | 1 | 2026-01-01 | Acme | Engineer | Remote | 4.0/5 | Applied | ✅ | — | ../jds/acme-engineer.md | seed row |
 `;
 
+const HEADER_EXPANDED = `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | resume-md | final-score | PDF | Report | JD | Notes |
+|---|------|---------|------|-------|--------|---|---|-----|--------|----|-------|
+| 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ../output/cv-acme.md | 4.3/5 | ✅ | — | ../jds/acme-engineer.md | seed row |
+`;
+
 // TSV column order (status BEFORE score): num,date,company,role,status,score,pdf,report,notes[,location]
 const TSV_WITH_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\tnew row\tSingapore\n';
 const TSV_NO_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\tnew row\n';
 const TSV_WITH_JD_LOCATION = '2\t2026-02-02\tGlobex\tManager\tApplied\tN/A\t✅\t—\tjds/globex-manager.md\tnew row\tSingapore\n';
 const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tjd\tnotes\n3\t2026-03-03\tInitech\tLead\tEvaluated\t4.2/5\t❌\t—\tjds/initech-lead.md\tjd row\n';
+const TSV_EXPANDED_POSITIONAL = '4\t2026-04-04\tInitrode\tEngineering Manager\tEvaluated\t4.1/5\toutput/cv-initrode.md\t4.5/5\t✅\t[004](reports/004-initrode-2026-04-04.md)\tjds/initrode-engineering-manager.md\texpanded row\n';
 
 // ── Test 1: 10-column tracker merges into the correct columns ──────────────
 {
@@ -151,7 +159,30 @@ const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport
   rmSync(sb.dir, { recursive: true, force: true });
 }
 
-// ── Test 3: legacy 9-column layout still works (back-compat) ───────────────
+// ── Test 4: expanded TSV layout keeps resume/final/JD columns aligned ──────
+{
+  const sb = makeSandbox(HEADER_EXPANDED, { '4-initrode.tsv': TSV_EXPANDED_POSITIONAL });
+  const merge = runScript('merge-tracker.mjs', [], sb);
+  const row = dataRows(sb.tracker).find(l => l.includes('Initrode'));
+  const cells = row ? row.split('|').map(s => s.trim()) : [];
+  // cells: ['', num, date, company, role, score, status, resume-md, final-score, pdf, report, jd, notes, '']
+  if (
+    merge.code === 0 &&
+    cells[7].endsWith('/output/cv-initrode.md') &&
+    cells[8] === '4.5/5' &&
+    cells[9] === '✅' &&
+    cells[10] === '[004](reports/004-initrode-2026-04-04.md)' &&
+    cells[11] === 'jds/initrode-engineering-manager.md' &&
+    cells[12] === 'expanded row'
+  ) {
+    pass('expanded TSV merge preserves resume-md, final-score, PDF, Report, JD, and Notes columns');
+  } else {
+    fail(`expanded TSV merge failed (code ${merge.code}) row: ${row}\n${merge.stdout}`);
+  }
+  rmSync(sb.dir, { recursive: true, force: true });
+}
+
+// ── Test 5: legacy 9-column layout still works (back-compat) ───────────────
 {
   const sb = makeSandbox(HEADER_9, { '2-globex.tsv': TSV_NO_LOCATION });
   const merge = runScript('merge-tracker.mjs', [], sb);
@@ -172,7 +203,7 @@ const TSV_WITH_JD_HEADER = 'num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport
   rmSync(sb.dir, { recursive: true, force: true });
 }
 
-// ── Test 4: JD column is inserted and populated after Report ───────────────
+// ── Test 6: JD column is inserted and populated after Report ───────────────
 {
   const sb = makeSandbox(HEADER_9, { '3-initech.tsv': TSV_WITH_JD_HEADER });
   const merge = runScript('merge-tracker.mjs', [], sb);
