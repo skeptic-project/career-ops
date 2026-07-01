@@ -46,3 +46,7 @@ Add a `resume-md` argument to the `career-ops` command to generate and save tail
 - [Task 002.02: Add applications tracker columns for resume-md and final-score](002.02-applications-tracker-columns.md)
 - [Task 002.03: Re-evaluate and calculate final-score based on tailored resume md](002.03-tailored-resume-scoring.md)
 - [Task 002.04: Generate tailored resume Markdown before high-score PDF generation](002.04-auto-pipeline-resume-md-before-pdf.md)
+
+## Triage Tasks
+
+- [Task 002.05: Route tailored Markdown generation through resume-md mode](002.05-route-tailoring-through-resume-md-mode.md)
