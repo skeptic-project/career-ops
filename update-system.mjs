@@ -209,6 +209,7 @@ const USER_PATHS = [
   'voice-dna.md',
   'portals.yml',
   'article-digest.md',
+  'batch/tracker-additions/merged/',
   'interview-prep/',
   'data/',
   'reports/',

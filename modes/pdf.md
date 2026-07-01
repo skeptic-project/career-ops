@@ -2,7 +2,7 @@
 
 ## Full pipeline
 
-1. Read the resume Markdown source: use the tailored `resume-md` file when auto-pipeline generated one for this JD; otherwise read `cv.md` as the source of truth
+1. Read the resume Markdown source: use the tailored `resume-md` file when auto-pipeline generated one for this JD through `modes/resume-md.md`; otherwise read `cv.md` as the source of truth
 2. Ask the user for the JD if it is not in context (text or URL)
 3. Extract 15-20 keywords from the JD
 4. Detect JD language → CV language (EN default)

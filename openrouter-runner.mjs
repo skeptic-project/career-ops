@@ -24,7 +24,6 @@ import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import yaml from 'js-yaml';
 import { persistJobDescriptionForOffer, persistJobDescriptionsForOffers } from './jd-store.mjs';
-import { writeTailoredResumeMarkdown } from './resume-md-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -673,20 +672,14 @@ async function cmdEvaluate(input, ctx) {
   }
   let resumeMdPath = '';
   let finalScore = '';
+  let trackerNote = '';
   if (isFinite(scoreValue) && scoreValue >= autoPdfScoreThreshold()) {
-    try {
-      const resumeResult = await writeTailoredResumeMarkdown({
-        input: jdPath ? `local:${jdPath}` : jdText,
-      });
-      resumeMdPath = resumeResult.path;
-      finalScore = resumeResult.finalScore;
-    } catch (err) {
-      finalScore = 'N/A';
-      console.warn(`[resume-md] ${err.message}`);
-    }
+    finalScore = 'N/A';
+    trackerNote = 'resume-md skipped: tailored Markdown requires career-ops resume-md agent mode/replacement plan';
+    console.warn(`[resume-md] ${trackerNote}`);
   }
   const reportLink  = `[${numStr}](reports/${numStr}-${slug}-${today}.md)`;
-  const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t${resumeMdPath}\t${finalScore}\t❌\t${reportLink}\t${jdPath}\t\n`;
+  const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t${resumeMdPath}\t${finalScore}\t❌\t${reportLink}\t${jdPath}\t${trackerNote}\n`;
   const tsvFile     = `batch/tracker-additions/or-${numStr}-${slug}.tsv`;
   writeFile(tsvFile, `num\tdate\tcompany\trole\tstatus\tscore\tresume-md\tfinal-score\tpdf\treport\tjd\tnotes\n${tsvLine}`);
 
@@ -700,16 +693,8 @@ async function cmdEvaluate(input, ctx) {
 
 // -- RESUME-MD --
 async function cmdResumeMd(input) {
-  if (!input) {
-    console.error('Usage: node openrouter-runner.mjs resume-md <job-description-url|local:jds/file.md|jds/file.md|reports/file.md|jd text>');
-    return;
-  }
-  const result = await writeTailoredResumeMarkdown({ input });
-  console.log(`\n✅ Markdown resume saved: ${result.path}`);
-  console.log(`Company: ${result.company}`);
-  console.log(`Role: ${result.role}`);
-  console.log(`final-score: ${result.finalScore}`);
-  console.log(`Targeted replacements: ${result.replacements.length}`);
+  console.error('resume-md generation requires the career-ops resume-md agent mode. The OpenRouter runner does not generate deterministic keyword-tailored resumes.');
+  console.error('Use the interactive career-ops resume-md workflow, or apply an agent-generated replacement plan with: node resume-md.mjs --plan <plan.json> <jd>');
 }
 
 // -- PIPELINE --
@@ -829,7 +814,7 @@ Auto-fetches free models from OpenRouter API and rotates through them with fallb
 COMMANDS:
   node openrouter-runner.mjs scan              → Scan Greenhouse APIs for new matching listings
   node openrouter-runner.mjs evaluate <url>    → Evaluate a listing by URL
-  node openrouter-runner.mjs resume-md <jd>    → Tailor CV and save Markdown only
+  node openrouter-runner.mjs resume-md <jd>    → Explains agent-mode resume-md requirement
   node openrouter-runner.mjs evaluate          → Paste a job description interactively
   node openrouter-runner.mjs pipeline          → Batch-evaluate all pending entries in pipeline.md
   node openrouter-runner.mjs apply <report_no> → Generate application form answers from a report

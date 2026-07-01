@@ -1730,6 +1730,7 @@ console.log('\n12b. Resume Markdown tailoring');
 try {
   const {
     tailorResumeMarkdown,
+    applyResumeReplacementPlan,
     estimateResumeMatchScore,
     buildResumeMarkdownPath,
     resolveJobDescriptionInput,
@@ -1747,16 +1748,40 @@ Engineering Manager with platform experience.
 - Node.js
 `;
   const jd = 'Engineering Manager role for cloud-hosted SaaS reliability, SDLC, code reviews, uptime, mentoring, and stakeholder communication.';
-  const tailored = tailorResumeMarkdown(baseCv, jd);
+  const plan = [{
+    before: 'Engineering Manager with platform experience.',
+    after: 'Engineering Manager with platform experience across cloud-hosted SaaS reliability, SDLC, code reviews, uptime, mentoring, and stakeholder communication.',
+    reason: 'Mirror JD leadership and reliability requirements',
+    source: 'JD requirements and base CV summary',
+    risk: 'none',
+  }];
+  let deterministicRejected = false;
+  try {
+    tailorResumeMarkdown(baseCv, jd);
+  } catch {
+    deterministicRejected = true;
+  }
+  const tailored = applyResumeReplacementPlan(baseCv, plan);
   const finalScore = estimateResumeMatchScore(jd, tailored.markdown);
   const pathOut = buildResumeMarkdownPath({ candidateName: 'Jane Doe', company: 'Acme Inc.' });
 
+  deterministicRejected
+    ? pass('resume-md rejects deterministic keyword-only tailoring')
+    : fail('resume-md still allows deterministic keyword-only tailoring');
   tailored.markdown.startsWith('# Jane Doe\n\n## Professional Summary\n\n')
     ? pass('resume-md preserves markdown heading structure')
     : fail('resume-md changed markdown heading structure');
-  tailored.replacements.length === 1 && tailored.markdown.includes('Role-relevant focus areas include')
-    ? pass('resume-md uses targeted replacement for JD alignment')
-    : fail('resume-md did not apply the expected targeted replacement');
+  tailored.replacements.length === 1 && tailored.markdown.includes('cloud-hosted SaaS reliability')
+    ? pass('resume-md applies agent replacement plan for JD alignment')
+    : fail('resume-md did not apply the expected replacement plan');
+  try {
+    applyResumeReplacementPlan(baseCv, [{ before: 'missing text', after: 'replacement', reason: 'x', source: 'x', risk: 'none' }]);
+    fail('resume-md should reject missing replacement source text');
+  } catch (err) {
+    /exactly once/.test(err.message)
+      ? pass('resume-md rejects ambiguous or missing replacement source text')
+      : fail(`resume-md replacement validation failed unexpectedly: ${err.message}`);
+  }
   /^output\/cv-jane-doe-acme-inc\.md$/.test(pathOut)
     ? pass('resume-md output path uses candidate and company slugs')
     : fail(`resume-md output path unexpected: ${pathOut}`);
@@ -3353,10 +3378,10 @@ if (!sqliteAvailable) {
       // 1. Round trip: clean canonical input must export byte-identical.
       const clean =
         '# Applications Tracker\n\n' +
-        '| # | Date | Company | Role | Score | Status | PDF | Report | JD | Notes |\n' +
-        '|---|------|---------|------|-------|--------|-----|--------|----|-------|\n' +
-        '| 2 | 2026-01-05 | Beta | Designer | 4.0/5 | Applied | ✅ | [2](../reports/002-beta-2026-01-05.md) |  | second |\n' +
-        '| 1 | 2026-01-04 | Acme | Engineer | 4.2/5 | Evaluated | ❌ | [1](../reports/001-acme-2026-01-04.md) |  | first |\n';
+        '| # | Date | Company | Role | Score | Status | resume-md | final-score | PDF | Report | JD | Notes |\n' +
+        '|---|------|---------|------|-------|--------|---|---|-----|--------|----|-------|\n' +
+        '| 2 | 2026-01-05 | Beta | Designer | 4.0/5 | Applied |  | — | ✅ | [2](../reports/002-beta-2026-01-05.md) |  | second |\n' +
+        '| 1 | 2026-01-04 | Acme | Engineer | 4.2/5 | Evaluated |  | — | ❌ | [1](../reports/001-acme-2026-01-04.md) |  | first |\n';
       writeFileSync(md, clean);
       if (trackerRun(['sync']) === null) {
         fail('tracker sync crashed on clean fixture');
@@ -3376,7 +3401,7 @@ if (!sqliteAvailable) {
 
       // 2. Corruption is detected and normalized in the index ONLY.
       const corrupted = clean +
-        '| 1 | 2026-01-06 | Gamma | PM | — | 3.5/5 | ❌ | 鈥? | drifted |\n'; // dup id + score in status + mojibake
+        '| 1 | 2026-01-06 | Gamma | PM | — | 3.5/5 |  |  | ❌ | 鈥? |  | drifted |\n'; // dup id + score in status + mojibake
       writeFileSync(md, corrupted);
       if (trackerRun(['sync', '--check']) === null) {
         pass('sync --check exits non-zero when corruption is present');

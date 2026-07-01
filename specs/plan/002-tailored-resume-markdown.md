@@ -1,10 +1,10 @@
 ---
 type: epic
 id: 002
-status: ready
+status: dev-done
 owner: product
 tags:
-  - ready
+  - dev-done
   - career-ops
   - tailored-resume
   - resume-md
@@ -40,7 +40,7 @@ Add a `resume-md` argument to the `career-ops` command to generate and save tail
 - For a high-score job that triggers PDF generation, the pipeline generates `output/cv-{candidate}-{company}.md` first, evaluates that Markdown for `final-score`, then generates the PDF from the tailored Markdown resume.
 - The tracker row for PDF-generating evaluations contains both `resume-md` and `final-score` before `PDF`.
 
-## Ready Tasks
+## Dev-Done Tasks
 
 - [Task 002.01: Implement resume-md argument for career-ops command](002.01-resume-md-argument.md)
 - [Task 002.02: Add applications tracker columns for resume-md and final-score](002.02-applications-tracker-columns.md)

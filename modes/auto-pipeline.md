@@ -43,7 +43,7 @@ If the input was a URL, save the extracted JD Markdown under `jds/{company-role}
 ## Step 2.5 — Generate Tailored Resume Markdown & Calculate final-score (if generating PDF)
 
 If the evaluation score is high enough to trigger PDF generation (score >= `auto_pdf_score_threshold` in `config/profile.yml` or defaults to 3.0):
-1. **Generate tailored resume Markdown:** Tailor `cv.md` for this JD. Preserve all markdown formatting, whitespace, heading levels, and structure exactly. While applying changes, use **targeted string replacements (targeted `str_replace` operations)** — never rewrite the file from scratch!
+1. **Generate tailored resume Markdown through `resume-md` mode:** Execute the `modes/resume-md.md` workflow for this JD. Do not use deterministic keyword appending from `resume-md-core.mjs` as a substitute. The agent must decide the tailoring changes and apply them as targeted string replacements.
 2. **Save tailored resume Markdown:** Save it at `output/cv-{candidate}-{company}.md`.
 3. **Calculate final-score:** Re-evaluate the JD against this tailored Markdown resume (rather than base `cv.md`) to calculate the `final-score`.
 4. **Include in Tracker:** Update the `resume-md` column in the tracker TSV addition with this file path, and the `final-score` column with this new score.

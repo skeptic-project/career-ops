@@ -97,21 +97,59 @@ export function extractKeywords(text = '', limit = 18) {
 }
 
 export function createTargetedReplacements(cvMarkdown, jdText) {
-  const replacements = [];
-  const keywords = extractKeywords(jdText, 12);
-  const summaryMatch = cvMarkdown.match(/(## Professional Summary\n\n)([\s\S]*?)(\n\n---|\n\n## )/);
-  if (summaryMatch) {
-    const current = summaryMatch[2];
-    const selected = keywords.slice(0, 8).join(', ');
-    const focusSentence = selected
-      ? ` Role-relevant focus areas include ${selected}.`
-      : '';
-    const replacement = !focusSentence || current.includes('Role-relevant focus areas include')
-      ? current
-      : `${current}${focusSentence}`;
-    if (replacement !== current) replacements.push({ before: current, after: replacement });
+  throw new Error('Deterministic keyword resume tailoring has been removed. Generate an agent replacement plan with modes/resume-md.md and apply it with applyResumeReplacementPlan().');
+}
+
+function normalizeReplacementPlan(plan) {
+  if (Array.isArray(plan)) return plan;
+  if (Array.isArray(plan?.replacements)) return plan.replacements;
+  throw new Error('Replacement plan must be an array or an object with a replacements array');
+}
+
+function countOccurrences(haystack, needle) {
+  if (!needle) return 0;
+  let count = 0;
+  let index = 0;
+  while ((index = haystack.indexOf(needle, index)) !== -1) {
+    count += 1;
+    index += needle.length;
   }
-  return replacements;
+  return count;
+}
+
+function headingOrder(markdown) {
+  return String(markdown || '')
+    .split(/\r?\n/)
+    .filter(line => /^\s{0,3}#{1,6}\s+/.test(line))
+    .map(line => line.trim());
+}
+
+export function validateReplacementPlan(baseMarkdown, plan) {
+  const replacements = normalizeReplacementPlan(plan);
+  if (replacements.length === 0) {
+    throw new Error('Replacement plan must include at least one replacement');
+  }
+
+  return replacements.map((replacement, index) => {
+    const before = replacement?.before;
+    const after = replacement?.after;
+    if (typeof before !== 'string' || before.length === 0) {
+      throw new Error(`Replacement ${index + 1}: before must be a non-empty string copied exactly from cv.md`);
+    }
+    if (typeof after !== 'string' || after.length === 0) {
+      throw new Error(`Replacement ${index + 1}: after must be a non-empty string`);
+    }
+    for (const field of ['reason', 'source', 'risk']) {
+      if (replacement[field] != null && typeof replacement[field] !== 'string') {
+        throw new Error(`Replacement ${index + 1}: ${field} must be a string when provided`);
+      }
+    }
+    const occurrences = countOccurrences(baseMarkdown, before);
+    if (occurrences !== 1) {
+      throw new Error(`Replacement ${index + 1}: before text must appear exactly once in cv.md; found ${occurrences}`);
+    }
+    return { ...replacement, before, after };
+  });
 }
 
 export function applyTargetedReplacements(baseMarkdown, replacements) {
@@ -126,13 +164,21 @@ export function applyTargetedReplacements(baseMarkdown, replacements) {
   return output;
 }
 
+export function applyResumeReplacementPlan(baseMarkdown, plan) {
+  const beforeHeadings = headingOrder(baseMarkdown);
+  const replacements = validateReplacementPlan(baseMarkdown, plan);
+  const markdown = applyTargetedReplacements(baseMarkdown, replacements);
+  const afterHeadings = headingOrder(markdown);
+
+  if (beforeHeadings.join('\n') !== afterHeadings.join('\n')) {
+    throw new Error('Replacement plan changed markdown heading structure');
+  }
+
+  return { markdown, replacements };
+}
+
 export function tailorResumeMarkdown(cvMarkdown, jdText) {
-  const replacements = createTargetedReplacements(cvMarkdown, jdText);
-  return {
-    markdown: applyTargetedReplacements(cvMarkdown, replacements),
-    replacements,
-    keywords: extractKeywords(jdText, 18),
-  };
+  throw new Error('Deterministic keyword resume tailoring has been removed. Generate an agent replacement plan with modes/resume-md.md and apply it with applyResumeReplacementPlan().');
 }
 
 export function estimateResumeMatchScore(jdText, resumeMarkdown) {
@@ -207,12 +253,16 @@ export async function writeTailoredResumeMarkdown({
   input,
   cvPath = 'cv.md',
   profilePath = 'config/profile.yml',
+  replacementPlan,
 } = {}) {
+  if (!replacementPlan) {
+    throw new Error('Tailored resume Markdown requires an agent-generated replacement plan. Run career-ops resume-md mode to create the plan, then apply it with resume-md.mjs --plan.');
+  }
   const resolved = await resolveJobDescriptionInput(input);
   const cvMarkdown = readFileSync(cvPath, 'utf-8');
   const candidateName = loadCandidateName(profilePath);
   const { company, role } = extractJobContext(resolved.text, resolved.source);
-  const tailored = tailorResumeMarkdown(cvMarkdown, resolved.text);
+  const tailored = applyResumeReplacementPlan(cvMarkdown, replacementPlan);
   const final = estimateResumeMatchScore(resolved.text, tailored.markdown);
   const outputPath = buildResumeMarkdownPath({ candidateName, company });
   mkdirSync(resolve(ROOT, 'output'), { recursive: true });
