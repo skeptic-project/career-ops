@@ -2,3 +2,4 @@
 
 | # | Date | Company | Role | Score | Status | resume-md | final-score | PDF | Report | JD | Notes |
 |---|------|---------|------|-------|--------|---|---|-----|--------|----|-------|
+| 1 | 2026-07-01 | GeoServe | Engineering Manager | 4.0/5 | Evaluated | ../output/cv-tushar-gangwal-geoserve.md | 4.1/5 | ✅ | [001](../reports/001-geoserve-2026-07-01.md) | ../jds/geoserve-engineering-manager.md | Strong EM/SaaS delivery match; screen early for remote/hybrid flexibility, salary band, and architecture authority. |
